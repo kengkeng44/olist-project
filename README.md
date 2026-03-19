@@ -2,7 +2,7 @@
 
 
 
-使用巴西電商平台 Olist 的公開資料集，透過 SQL 查詢與 Python 視覺化進行資料分析。
+使用巴西電商平台 Olist 的公開資料集，透過 SQL 查詢與 Python 進行資料分析，並以 Tableau 製作互動式儀表板。
 
 
 
@@ -13,6 +13,20 @@
 \- SQLite / DBeaver
 
 \- Jupyter Notebook
+
+\- Tableau Public
+
+
+
+\## 視覺化儀表板
+
+
+
+🔗 \[互動式 Tableau Dashboard](https://public.tableau.com/app/profile/jenho.cheng/viz/2\_17739060990590/1?publish=yes)
+
+
+
+!\[Dashboard Preview](output/olist\_screenshot.png)
 
 
 
