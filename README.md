@@ -38,5 +38,5 @@ Python / SQLite / DBeaver / Jupyter Notebook / Tableau
 
 
 
-!\[dashboard](output/olist\_screens
+!\[dashboard](output/olist\_screenshot.png)
 
