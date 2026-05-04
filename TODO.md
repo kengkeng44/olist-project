@@ -6,9 +6,9 @@ README 第一版已完成 RFM 分群 + 4 條 insight。比對 Kaggle 高讚 Note
 
 ## 🔴 必補（影響 README 第一印象，PM portfolio 標配）
 
-- [ ] **#1 EDA 資料概況段** — 訂單數 / 客戶數 / 賣家數 / 類目數 / 時間跨度 / 州別 / 訂單狀態分布。放月營收趨勢圖 + 州別熱力圖 + 付款方式長條圖三件組。註解 2018/09 後的營收斷崖（資料截斷，非真實衰退）。
-- [ ] **#2 9 張表的 Schema / ER 圖** — 用 Mermaid 畫關聯圖，說明 `customer_id` vs `customer_unique_id` 的差異（同一個人在不同訂單會有不同 customer_id）。
-- [ ] **#3 Insight 量化成 ROI** — 召回流失風險群的試算：召回率 5% / 10% 各帶來多少營收，假設 EDM 成本，算 ROI 倍數。PM 履歷必備，不能空泛說「應該召回」。
+- [x] **#1 EDA 資料概況段** — 已加入 notebook §3（規模快照 + 訂單狀態 / 付款 / 州別三大分布），README 第三章節同步寫入實際數字（99,441 訂單、73.9% credit_card、SP 佔 41.9%）。月營收圖已加 2018-09 紅色虛線標註。
+- [x] **#2 9 張表的 Schema / ER 圖** — README 第四章節加入 Mermaid ER 圖，標註 `customer_id` vs `customer_unique_id` 差異說明。
+- [x] **#3 Insight 量化成 ROI** — README 第八章節三情境試算（5% / 10% / 20% 召回率對應 ROI 2.3× / 4.7× / 9.4×）。
 
 ---
 
