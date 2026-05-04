@@ -197,6 +197,7 @@ erDiagram
 | 6 | 物流效率：預期 vs 實際送達天數 | 雙序列比較 | §5 |
 | 7 | 整體 KPI 與年度成長 | 跨年比較 | §7 |
 | 8 | **RFM 客戶分群** | NTILE(5) Window + 規則分群 | §8 |
+| 9 | **Cohort 留存熱力圖** | 月份 cohort × 後續 N 月活躍率 | `notebook/cohort_analysis.py` |
 
 ---
 
@@ -243,7 +244,36 @@ erDiagram
 
 ---
 
-## 八、🚨 流失風險召回 ROI 試算
+## 八、Cohort 留存熱力圖 — F=1.0 的鐵證
+
+> 上一章從 RFM 規則推論「Olist 是獲客驅動而非留存驅動」。本章用 cohort 分析**量化驗證**這個結論。
+
+### 方法
+- 把每個客戶的「首次購買月」當作其 cohort
+- 追蹤後續 N 個月該 cohort 仍有任何訂單的比例(cell 值 = 該月活躍人數 ÷ cohort 規模)
+- 使用 `customer_unique_id` 跨訂單追蹤同一個人
+
+### 結果
+
+![cohort](output/cohort_retention.png)
+
+### 關鍵讀圖
+1. **M0 全部 100%** — 首購月當然全活躍(定義使然)
+2. **M1 普遍 0.2–0.7%** — 下個月就消失 99% 以上。任何成熟電商 M1 應落在 **5–15%**
+3. **整個熱力圖一片黃白** — 沒有任何 cohort 在後續月份回升
+4. **93,358 個獨立客戶,只有 1,693 人 (1.81%) 在不只一個月份買過** — 平台級單次客現象
+
+### 業務意涵
+- 回購率不是「低」,而是**接近不存在**。Olist 不缺新客,缺的是讓客回來的理由。
+- 這個發現比「冠軍 vs 流失客」分群更值得 PM / CRM 團隊優先處理。
+- 對應第九章 ROI 召回策略 — R$ 469K 機會其實是「**從零到有的回購建立**」,難度高於成熟電商的「召回」。
+- 三個可驗證假設留待 v2 拆解:(a) 巴西電商通病? (b) Olist 商品結構偏一次性消費(家電、家具)? (c) 平台未經營會員體系?
+
+> 重現:`python notebook/cohort_analysis.py`
+
+---
+
+## 九、🚨 流失風險召回 ROI 試算
 
 > 把 insight 量化成可決策的數字 — PM / 行銷團隊看的就是這個。
 
@@ -271,16 +301,15 @@ erDiagram
 
 ---
 
-## 九、本次分析的限制（誠實聲明）
+## 十、本次分析的限制（誠實聲明）
 
-1. **F 維度鑑別力低**：90% 客戶只買過 1 次，本次分群實際上由 R × M 雙維度驅動。
+1. **F 維度鑑別力低**：90% 客戶只買過 1 次，本次分群實際上由 R × M 雙維度驅動(已於第八章用 cohort 留存圖佐證)。
 2. **「忠誠客戶」群組金額偏低**：規則只卡 R≥4, F≥3 沒卡 M，導致這群 ARPU（R$ 89）反而比一般客戶（R$ 134）低 — 屬於規則設計侷限，v2 將加 M 條件改善。
 3. **2018 年資料截斷**：Olist 公開資料只到 2018-10，2018-09 後月營收看起來「下滑」實為資料缺失。月營收圖已標註紅色虛線。
-4. **未做 Cohort 分析**：留存熱力圖能更精確定位「F=1.0」的時序樣態，列入 v2 待辦。
 
 ---
 
-## 十、為什麼選規則式分群而非 K-Means？
+## 十一、為什麼選規則式分群而非 K-Means？
 
 頂尖 Notebook 多數會跑 K-Means + Elbow + Silhouette。我刻意選**規則式**，三個理由：
 
@@ -305,13 +334,15 @@ K-Means 適用情境是「F、M 都有顯著變異」的成熟電商（如 Amazo
 ```
 olist-project/
 ├── notebook/
-│   └── olist.ipynb              # 主分析 Notebook（9 章節 + RFM）
+│   ├── olist.ipynb              # 主分析 Notebook（9 章節 + RFM）
+│   └── cohort_analysis.py       # Cohort 留存熱力圖獨立腳本
 ├── sql/
 │   └── olist_sql.sql            # 所有 SQL 查詢（含 NTILE Window Function）
 ├── output/                      # 圖表與匯出 CSV
 │   ├── eda_overview.png         # 訂單狀態 / 付款 / 州別三大分布
 │   ├── logistics.png            # 各州物流效率
 │   ├── rfm_segments.png         # 6 segment 客戶數與營收
+│   ├── cohort_retention.png     # Cohort 留存熱力圖
 │   └── *.csv                    # Tableau 用匯出
 ├── data/                        # Kaggle 9 個 CSV（gitignore）
 ├── TODO.md                      # 後續延伸待辦
@@ -362,7 +393,7 @@ jupyter notebook olist.ipynb
 
 ## 後續延伸（見 [TODO.md](TODO.md)）
 
-- **Cohort / Retention 月留存熱力圖** — 視覺化「F=1.0」全平台單次客
-- **巴西分期付款洞察** — 分 8 期以上 ARPU vs 一次付清差異
-- **商品評分 vs 物流天數相關性檢定**
+- **巴西分期付款洞察** — 分 8 期以上 ARPU vs 一次付清差異(Olist 資料獨家賣點)
+- **商品評分 vs 物流天數相關性檢定** — Pearson / Spearman 量化「物流爛 → 1 星」假設
+- **Tableau dashboard 升級** — 加入 RFM 分群互動篩選器
 - **月營收 Prophet / ARIMA 時序預測**
