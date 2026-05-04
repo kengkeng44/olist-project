@@ -198,6 +198,7 @@ erDiagram
 | 7 | 整體 KPI 與年度成長 | 跨年比較 | §7 |
 | 8 | **RFM 客戶分群** | NTILE(5) Window + 規則分群 | §8 |
 | 9 | **Cohort 留存熱力圖** | 月份 cohort × 後續 N 月活躍率 | `notebook/cohort_analysis.py` |
+| 10 | **分期付款 vs ARPU & 回購率** | 5 桶分組 × 雙指標比較 | `notebook/installments_analysis.py` |
 
 ---
 
@@ -301,7 +302,50 @@ erDiagram
 
 ---
 
-## 十、本次分析的限制（誠實聲明）
+## 十、巴西分期付款洞察 — Olist 資料的差異化賣點
+
+> 巴西電商最大的文化特徵是**信用卡分期文化**(76,795 筆訂單,73.9% 用 credit_card,平均 3.5 期)。本章從 `order_payments.payment_installments` 挖兩個 PM 該關心的問題:
+> **Q1 高分期是否帶來高客單價? Q2 高分期客戶是否更容易回購?**
+
+### 結果
+
+![installments](output/installments_insight.png)
+
+| 分期數 | 訂單數 | 平均客單 (R$) | 客戶數 | 回購率 |
+|---|---:|---:|---:|---:|
+| 1 (一次付清) | 25,455 | **96** | 23,931 | 2.51% |
+| 2-3 期 | 22,874 | 134 | 21,502 | 2.81% |
+| 4-6 期 | 16,257 | 181 | 15,173 | 3.18% |
+| 7-10 期 | 11,866 | **334** | 10,966 | **4.13%** |
+| 11+ 期 | 341 | 358 | 311 | 4.18% |
+
+### 兩個發現
+
+1. **分期數 → ARPU:7-10 期是一次付清的 3.48 倍** (R$ 334 vs R$ 96)。線性增長,沒有反轉。直觀上有道理:大件商品(家電、家具)消費者才會選分期。
+2. **分期數 → 回購率:7+ 期客戶回購率高 65%** (4.13% vs 2.51%)。這個更關鍵 — 在第八章已證實「全平台 1.81% 跨月回購」的背景下,**分期客戶是少數會回來的人**。
+
+### 為什麼這兩個發現重要
+
+- 第一個是**收入槓桿** — 推廣分期方案直接拉高 GMV
+- 第二個是**留存槓桿** — 分期客戶因「未付清」與平台維持帳務關係,自然降低流失
+- 結合來看:**分期不只是付款選項,是 Olist 的隱形 CRM**
+
+### 行動建議
+
+1. **首頁/結帳頁更積極推銷 7+ 期方案** — 目前 7-10 期僅佔信用卡訂單 15%,有顯著滲透空間
+2. **針對首單一次付清的客戶,第二次到訪推「無息分期」EDM** — 把低 ARPU + 低回購群往高分期路徑導流
+3. **與發卡銀行談更長免息期(8 期已是現有甜蜜點 n=4,268,測試 12 期能否拉動更高 ARPU)**
+
+### 限制與待驗證
+
+- 因果方向未證實:可能是「客單高 → 必須分期」而非「分期 → 客單高」。需 A/B 測試在相同商品頁強制分期 vs 不分期看轉換差異。
+- 11+ 期樣本過少 (n=341),不納入主結論。
+
+> 重現:`python notebook/installments_analysis.py`
+
+---
+
+## 十一、本次分析的限制（誠實聲明）
 
 1. **F 維度鑑別力低**：90% 客戶只買過 1 次，本次分群實際上由 R × M 雙維度驅動(已於第八章用 cohort 留存圖佐證)。
 2. **「忠誠客戶」群組金額偏低**：規則只卡 R≥4, F≥3 沒卡 M，導致這群 ARPU（R$ 89）反而比一般客戶（R$ 134）低 — 屬於規則設計侷限，v2 將加 M 條件改善。
@@ -309,7 +353,7 @@ erDiagram
 
 ---
 
-## 十一、為什麼選規則式分群而非 K-Means？
+## 十二、為什麼選規則式分群而非 K-Means？
 
 頂尖 Notebook 多數會跑 K-Means + Elbow + Silhouette。我刻意選**規則式**，三個理由：
 
@@ -335,7 +379,8 @@ K-Means 適用情境是「F、M 都有顯著變異」的成熟電商（如 Amazo
 olist-project/
 ├── notebook/
 │   ├── olist.ipynb              # 主分析 Notebook（9 章節 + RFM）
-│   └── cohort_analysis.py       # Cohort 留存熱力圖獨立腳本
+│   ├── cohort_analysis.py       # Cohort 留存熱力圖獨立腳本
+│   └── installments_analysis.py # 分期付款 ARPU & 回購率分析腳本
 ├── sql/
 │   └── olist_sql.sql            # 所有 SQL 查詢（含 NTILE Window Function）
 ├── output/                      # 圖表與匯出 CSV
@@ -343,6 +388,7 @@ olist-project/
 │   ├── logistics.png            # 各州物流效率
 │   ├── rfm_segments.png         # 6 segment 客戶數與營收
 │   ├── cohort_retention.png     # Cohort 留存熱力圖
+│   ├── installments_insight.png # 分期付款雙圖
 │   └── *.csv                    # Tableau 用匯出
 ├── data/                        # Kaggle 9 個 CSV（gitignore）
 ├── TODO.md                      # 後續延伸待辦
@@ -393,7 +439,6 @@ jupyter notebook olist.ipynb
 
 ## 後續延伸（見 [TODO.md](TODO.md)）
 
-- **巴西分期付款洞察** — 分 8 期以上 ARPU vs 一次付清差異(Olist 資料獨家賣點)
 - **商品評分 vs 物流天數相關性檢定** — Pearson / Spearman 量化「物流爛 → 1 星」假設
 - **Tableau dashboard 升級** — 加入 RFM 分群互動篩選器
 - **月營收 Prophet / ARIMA 時序預測**
