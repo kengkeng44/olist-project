@@ -1,0 +1,8 @@
+# Treat Jupyter notebooks as documentation, not code.
+# This prevents .ipynb (which embeds large base64 outputs) from dominating
+# GitHub's language stats and hiding the actual SQL / Python work.
+*.ipynb linguist-documentation
+
+# Slide outputs are build artifacts, not source code.
+slides/portfolio.pdf  linguist-generated
+slides/portfolio.pptx linguist-generated
