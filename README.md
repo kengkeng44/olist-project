@@ -381,6 +381,10 @@ olist-project/
 │   ├── olist.ipynb              # 主分析 Notebook（9 章節 + RFM）
 │   ├── cohort_analysis.py       # Cohort 留存熱力圖獨立腳本
 │   └── installments_analysis.py # 分期付款 ARPU & 回購率分析腳本
+├── slides/                      # 13 頁 PM 面試簡報（Marp markdown 編譯）
+│   ├── portfolio.md             # 簡報原始檔
+│   ├── portfolio.pdf            # 編譯後 PDF
+│   └── portfolio.pptx           # 編譯後 PowerPoint
 ├── sql/
 │   └── olist_sql.sql            # 所有 SQL 查詢（含 NTILE Window Function）
 ├── output/                      # 圖表與匯出 CSV
