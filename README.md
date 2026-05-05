@@ -204,6 +204,62 @@ erDiagram
 
 ---
 
+## 七之零、核心 SQL — RFM with NTILE Window Function
+
+> 完整 SQL 在 [`sql/olist_sql.sql`](sql/olist_sql.sql),這裡展示 RFM 分群的核心邏輯,證明 SQL 功底而非套件依賴。
+
+```sql
+-- 用 NTILE(5) Window Function 把 R/F/M 各自切五等分,再用規則組成 6 個業務分群
+WITH snapshot AS (
+    SELECT MAX(order_purchase_timestamp) AS snapshot_date
+    FROM orders WHERE order_status = 'delivered'
+),
+rfm_base AS (
+    SELECT
+        c.customer_unique_id,                                   -- ⚠️ 用 unique_id 不是 customer_id
+        ROUND(JULIANDAY((SELECT snapshot_date FROM snapshot)) -
+              JULIANDAY(MAX(o.order_purchase_timestamp)), 0) AS recency_days,
+        COUNT(DISTINCT o.order_id) AS frequency,
+        ROUND(SUM(oi.price), 2)    AS monetary
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    JOIN customers   c  ON o.customer_id = c.customer_id
+    WHERE o.order_status = 'delivered'
+    GROUP BY c.customer_unique_id
+),
+rfm_scored AS (
+    SELECT *,
+           NTILE(5) OVER (ORDER BY recency_days DESC) AS r_score,
+           NTILE(5) OVER (ORDER BY frequency    ASC)  AS f_score,
+           NTILE(5) OVER (ORDER BY monetary     ASC)  AS m_score
+    FROM rfm_base
+)
+SELECT
+    CASE
+        WHEN r_score >= 4 AND f_score >= 4 AND m_score >= 4 THEN '冠軍客戶'
+        WHEN r_score >= 4 AND f_score >= 3                  THEN '忠誠客戶'
+        WHEN r_score >= 4                                   THEN '潛力新客'
+        WHEN r_score <= 2 AND f_score >= 3                  THEN '流失風險'
+        WHEN r_score <= 2                                   THEN '已流失'
+        ELSE                                                     '一般客戶'
+    END AS 客戶分群,
+    COUNT(*)                AS 客戶數,
+    ROUND(AVG(monetary), 2) AS ARPU,
+    ROUND(SUM(monetary), 2) AS 群組總營收
+FROM rfm_scored GROUP BY 客戶分群 ORDER BY 群組總營收 DESC;
+```
+
+**為什麼用 NTILE 而不是 Python pandas qcut?**
+
+| 比較 | NTILE (SQL) | pandas qcut |
+|---|---|---|
+| 可移植 | Snowflake / BigQuery / Redshift / SQLite 都通 | 只能 Python |
+| 大資料 | 在 DB 內做,千萬筆也快 | 要把 100M 筆拉回 Python 記憶體 |
+| 排程 | 直接接 dbt / Airflow,寫進 DW | 需要額外 wrapper |
+| **業界訊號** | **「會用 DW」 → senior 等級** | 「會 Python」 → 入門等級 |
+
+---
+
 ## 七、關鍵發現與建議
 
 ### 業績
@@ -301,6 +357,8 @@ erDiagram
 2. **追蹤指標**：召回率（開信率 → 點擊率 → 轉換率）、增量營收 vs 控制組
 3. **若召回率 > 8%**：預算翻倍，增加觸及次數（再行銷 + 簡訊）
 4. **若召回率 < 3%**：換策略，從「折扣」改為「物流升級」或「免運」（針對偏遠州）
+
+> 📄 **完整 PRD-style 提案**:[`proposals/recall_campaign_prd.md`](proposals/recall_campaign_prd.md) — 把這個 ROI 試算包裝成可交付給 leadership 的決策文件,含時程、跨團隊協作、風險評估、決策樹
 
 ---
 

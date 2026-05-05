@@ -311,3 +311,67 @@ Olist 巴西電商分析
 > 4. 如何隱藏 Tableau Public 預設的「View Data」按鈕
 
 AI 工具可以幫你回答 1-4,但**整個 dashboard 的拼版仍然要你親自進 Tableau 拖拉**。
+
+---
+
+## Fiverr / Upwork 委外文案 (英文版)
+
+直接貼到平台 job posting 即可,預算建議 $50-150 USD,期望 6-10 小時:
+
+```
+Title: Build clean Tableau Public dashboard from spec (1 page, 4 KPIs + 3 charts)
+
+I have a fully-prepared dashboard spec for an e-commerce data analysis (Brazilian
+Olist marketplace, public Kaggle data). I need a Tableau Public-published dashboard
+following the spec exactly — clean, minimalist, dark-navy + red accent design.
+
+Inputs (all in my GitHub repo, you can pull raw CSV via URL):
+- 5 pre-aggregated CSVs (~10 KB each)
+- Color palette and typography defined in spec
+- Layout mockup (1280 x 800)
+
+Deliverables:
+- 1-page Tableau Public dashboard published to your account, ownership transferred to me
+- Source .twbx workbook file
+- 1 round of revisions
+
+Required skills:
+- Tableau Public publishing experience (3+ dashboards on portfolio)
+- Familiarity with Brazil geographic mapping in Tableau
+- English communication
+
+Spec link: https://github.com/kengkeng44/olist-project/blob/master/tableau/dashboard_spec.md
+Data: https://github.com/kengkeng44/olist-project/tree/master/output
+
+Timeline: 1 week from accept
+Budget: open to discussion
+```
+
+---
+
+## 親自做的時間表 (若不外包)
+
+| 階段 | 預估時間 | 重點 |
+|---|---|---|
+| 連線資料 + 設地理角色 | 30 min | 關鍵在「州」中文 → Tableau English state name |
+| 建 4 個 KPI sheets | 1 hr | calculated fields 在 spec 內已給 |
+| 月營收線圖 + reference line | 45 min | 2018-09 紅虛線 |
+| 州地圖 (choropleth) | 1.5 hr | Brazil GeoJSON 設定常 trip up 新手 |
+| RFM Treemap + 多行 label | 45 min | 最簡單的 sheet |
+| Dashboard 拼版 + Filter Action | 1 hr | Tiled container + 1 個互動 |
+| Tableau Public 發布 + 設定 | 30 min | 關 "Show sheets as tabs" 不要忘 |
+| **總計** | **~6 hr** | 第一次做加 +50% buffer |
+
+---
+
+## 這份 spec 的 git 紀錄
+
+- `25e3daf` 初版 spec
+- 後續更新會在此追加變更 log
+
+---
+
+## 為什麼要做這個 (給未來的自己)
+
+當下做 Streamlit 已經夠用,但 Tableau 是台灣傳統大企業 / 外商顧問業 / 銀行的硬性 keyword。雙軌策略 = 履歷涵蓋面更廣。**不需要做完美,做到 spec 7 成就有用**。
+
