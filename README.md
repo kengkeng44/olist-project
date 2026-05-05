@@ -365,7 +365,20 @@ K-Means 適用情境是「F、M 都有顯著變異」的成熟電商（如 Amazo
 
 ---
 
-## Tableau Dashboard
+## 互動式 Dashboard
+
+### 🚀 Streamlit App(推薦)
+
+5 分頁互動式 dashboard,含 ROI 試算機 + 互動 cohort 熱力圖。
+
+```powershell
+pip install -r requirements.txt
+streamlit run app/Home.py
+```
+
+詳見 [`app/README.md`](app/README.md) 含 Streamlit Cloud 免費部署步驟。
+
+### Tableau Dashboard
 
 [查看互動式儀表板](https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes)
 
@@ -377,6 +390,9 @@ K-Means 適用情境是「F、M 都有顯著變異」的成熟電商（如 Amazo
 
 ```
 olist-project/
+├── app/                         # Streamlit 互動 dashboard
+│   ├── Home.py                  # 入口頁 (KPIs + 月營收 + 三大發現)
+│   └── pages/                   # 5 個分頁 (EDA / 地理 / RFM / Cohort / 分期)
 ├── notebook/
 │   ├── olist.ipynb              # 主分析 Notebook（9 章節 + RFM）
 │   ├── cohort_analysis.py       # Cohort 留存熱力圖獨立腳本

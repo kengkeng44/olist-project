@@ -124,6 +124,10 @@ OUT.parent.mkdir(parents=True, exist_ok=True)
 plt.savefig(OUT, dpi=120, bbox_inches="tight")
 print(f"\nsaved: {OUT}")
 
+CSV_OUT = ROOT / "output" / "installments.csv"
+df.to_csv(CSV_OUT, encoding="utf-8-sig")
+print(f"saved: {CSV_OUT}")
+
 print("\n=== 摘要 ===")
 hi = df.loc["7-10 期"]
 lo = df.loc["1 (一次付清)"]

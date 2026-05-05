@@ -96,6 +96,12 @@ OUT.parent.mkdir(parents=True, exist_ok=True)
 plt.savefig(OUT, dpi=120, bbox_inches="tight")
 print(f"saved: {OUT}")
 
+CSV_OUT = ROOT / "output" / "cohort_retention.csv"
+retention.index = retention.index.strftime("%Y-%m")
+retention.columns = [f"M{i}" for i in retention.columns]
+retention.to_csv(CSV_OUT, encoding="utf-8-sig")
+print(f"saved: {CSV_OUT}")
+
 ever_repeat = (df.groupby("customer_unique_id")["order_month"].nunique() > 1).sum()
 total_customers = df["customer_unique_id"].nunique()
 print(f"\n=== 摘要 ===")
