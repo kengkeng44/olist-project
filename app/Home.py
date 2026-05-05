@@ -80,7 +80,8 @@ with left:
         hovertemplate="<b>%{x|%Y-%m}</b><br>R$ %{y:,.0f}<extra></extra>",
     ))
     fig.add_vline(
-        x=pd.Timestamp("2018-09-01"), line_dash="dash",
+        x=pd.Timestamp("2018-09-01").timestamp() * 1000,
+        line_dash="dash",
         line_color=ACCENT, opacity=0.7,
         annotation_text="2018-09 資料截斷", annotation_position="top right",
         annotation_font_color=ACCENT,
