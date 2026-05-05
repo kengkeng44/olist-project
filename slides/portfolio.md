@@ -231,7 +231,11 @@ customers --< orders --< order_items >-- products
 
 **Repo**: github.com/kengkeng44/olist-project
 
+**🚀 互動 Dashboard**: olist-jenho.streamlit.app
+
 **Tableau Dashboard**: public.tableau.com/profile/jenho.cheng
+
+**姊妹作 (A/B 測試)**: github.com/kengkeng44/cookie-cats-ab-test
 
 **重現**:
 `python notebook/cohort_analysis.py`

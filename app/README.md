@@ -1,5 +1,7 @@
 # Streamlit Dashboard
 
+**🚀 線上版**:https://olist-jenho.streamlit.app/
+
 互動式 dashboard,把 Olist 分析整理成 5 個分頁。比起靜態 README 或 Tableau Public,適合在面試時展示。
 
 ## 本機執行

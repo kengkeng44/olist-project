@@ -2,9 +2,11 @@
 
 > 用 SQL Window Function + RFM 規則分群，從 99K 筆巴西電商交易找出 **R$ 469K 召回商機** 與 **平台級留存問題**。
 
+**🚀 [互動 Dashboard](https://olist-jenho.streamlit.app/)** · **📊 [Tableau](https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes)** · **📑 [面試簡報 PDF](slides/portfolio.pdf)** · **🃏 [姊妹作:Cookie Cats A/B 測試](https://github.com/kengkeng44/cookie-cats-ab-test)**
+
 巴西電商平台 Olist 2016–2018 訂單資料分析專案。從 **業績趨勢、客戶體驗、客戶分群** 三個面向，找出可落地的經營建議。
 
-**工具**：`Python` · `SQLite` · `SQL (含 NTILE Window Function)` · `pandas` · `matplotlib` · `Tableau`
+**工具**：`Python` · `SQLite` · `SQL (含 NTILE Window Function)` · `pandas` · `matplotlib` · `Streamlit` · `Tableau`
 
 ---
 
@@ -369,14 +371,16 @@ K-Means 適用情境是「F、M 都有顯著變異」的成熟電商（如 Amazo
 
 ### 🚀 Streamlit App(推薦)
 
-5 分頁互動式 dashboard,含 ROI 試算機 + 互動 cohort 熱力圖。
+**👉 [olist-jenho.streamlit.app](https://olist-jenho.streamlit.app/)** — 5 分頁互動式 dashboard,含 ROI 試算機 + 互動 cohort 熱力圖。
+
+本地執行:
 
 ```powershell
 pip install -r requirements.txt
 streamlit run app/Home.py
 ```
 
-詳見 [`app/README.md`](app/README.md) 含 Streamlit Cloud 免費部署步驟。
+詳見 [`app/README.md`](app/README.md) 含 Streamlit Cloud 部署步驟。
 
 ### Tableau Dashboard
 
