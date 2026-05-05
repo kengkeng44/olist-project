@@ -2,7 +2,7 @@
 
 > 用 SQL Window Function + RFM 規則分群，從 99K 筆巴西電商交易找出 **R$ 469K 召回商機** 與 **平台級留存問題**。
 
-**🚀 [互動 Dashboard](https://olist-jenho.streamlit.app/)** · **📊 [Tableau](https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes)** · **📑 [面試簡報 PDF](slides/portfolio.pdf)** · **🃏 [姊妹作:Cookie Cats A/B 測試](https://github.com/kengkeng44/cookie-cats-ab-test)**
+**🚀 [互動 Dashboard](https://olist-jenho.streamlit.app/)** · **📊 [Tableau](https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes)** · **📑 [面試簡報 PDF](slides/portfolio.pdf)** · **🃏 [姊妹作:Cookie Cats A/B 測試](https://cookie-cats-jenho.streamlit.app/)**
 
 巴西電商平台 Olist 2016–2018 訂單資料分析專案。從 **業績趨勢、客戶體驗、客戶分群** 三個面向，找出可落地的經營建議。
 
