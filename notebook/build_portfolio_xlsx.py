@@ -132,18 +132,56 @@ def read_csv(name: str) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def read_raw_sample(filename: str, n: int = 10) -> tuple[list[str], list[list[str]]]:
-    """Read first N rows of a raw data CSV. Returns (headers, rows)."""
+# For each raw table, the column whose values we want to VARY across the
+# 3 sample rows so reviewers see real diversity (not 3 identical-looking rows).
+VARIETY_COL: dict[str, int] = {
+    "olist_orders_dataset.csv": 2,            # order_status
+    "olist_customers_dataset.csv": 4,         # customer_state
+    "olist_order_items_dataset.csv": 1,       # order_item_id (1, 2, 3 → multi-item)
+    "olist_order_payments_dataset.csv": 2,    # payment_type (credit_card / boleto / voucher)
+    "olist_order_reviews_dataset.csv": 2,     # review_score (1 / 3 / 5)
+}
+
+
+def read_raw_sample(filename: str, n: int = 3) -> tuple[list[str], list[list[str]]]:
+    """Read N "interesting" rows from a raw CSV — prefer rows where every
+    field is non-empty AND vary the categorical column so reviewers see
+    diversity instead of three identical-looking rows."""
     path = DATA_DIR / filename
     with path.open(encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         headers = next(reader)
-        rows: list[list[str]] = []
+        all_rows = []
         for i, row in enumerate(reader):
-            if i >= n:
+            if i >= 2000:
                 break
-            rows.append(row)
-    return headers, rows
+            all_rows.append(row)
+
+    full_rows = [r for r in all_rows if all(v and v.strip() for v in r)]
+    pool = full_rows if len(full_rows) >= n else (
+        sorted(all_rows, key=lambda r: -sum(1 for v in r if v and v.strip()))
+    )
+
+    var_col = VARIETY_COL.get(filename)
+    if var_col is not None and var_col < len(headers):
+        seen: set[str] = set()
+        picked: list[list[str]] = []
+        for r in pool:
+            v = r[var_col]
+            if v not in seen:
+                picked.append(r)
+                seen.add(v)
+                if len(picked) == n:
+                    break
+        # Pad if not enough unique values found
+        if len(picked) < n:
+            for r in pool:
+                if r not in picked:
+                    picked.append(r)
+                    if len(picked) == n:
+                        break
+        return headers, picked[:n]
+    return headers, pool[:n]
 
 
 def count_csv_rows(filename: str) -> int:
