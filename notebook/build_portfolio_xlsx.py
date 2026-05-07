@@ -487,9 +487,7 @@ def build_toc(wb: Workbook) -> None:
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 6, "C": 30, "D": 56, "E": 2})
 
-    title_block(ws, 2, "Table of Contents",
-                "Click any sheet name to jump. All visible sheets are linked from here.",
-                span=4)
+    title_block(ws, 2, "Table of Contents", span=4)
 
     header_row(ws, 5, ["#", "Sheet", "What it shows"])
     entries = [
@@ -530,7 +528,7 @@ def build_data_dictionary(wb: Workbook) -> None:
     set_col_widths(ws, {"A": 2, "B": 26, "C": 14, "D": 44, "E": 2})
 
     title_block(ws, 2, "Data Dictionary",
-                "9 raw tables · 1.55M rows. 3-row sample below; full data on GitHub.",
+                "9 tables · 1.55M rows. 3-row samples below.",
                 span=4)
 
     # Schema overview — one-line descriptions only
@@ -609,9 +607,7 @@ def build_summary(wb: Workbook) -> None:
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 18, "C": 60, "D": 2})
 
-    title_block(ws, 2, "Executive Summary",
-                "One-page brief for hiring managers — read in 60 seconds",
-                span=2)
+    title_block(ws, 2, "Executive Summary", span=2)
 
     blocks = [
         ("Question",
@@ -659,9 +655,7 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 32, "C": 18, "D": 18, "E": 18, "F": 18, "G": 2})
 
-    title_block(ws, 2, "Data Overview & KPIs",
-                "All values pulled from _data_calc via XLOOKUP. Update once → updates everywhere.",
-                span=5)
+    title_block(ws, 2, "Data Overview & KPIs", span=5)
 
     # ---- Scale & Coverage (formula-driven) ----
     section_header(ws, 5, "Scale & Coverage")
@@ -690,14 +684,8 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
 
     overview_end = 6 + len(overview_metrics)
 
-    # Caveat
-    cv = ws.cell(row=overview_end + 1, column=2,
-                 value="Caveat: 2018 data is truncated at 2018-10. Apparent post-Sep dip = data cutoff, not real decline.")
-    cv.font = font(italic=True, color=DARK_GRAY)
-    cv.alignment = left()
-
     # ---- Yearly KPIs (formula-driven from tbl_yearly) ----
-    yk_row = overview_end + 4
+    yk_row = overview_end + 3
     section_header(ws, yk_row, "Year-over-Year KPIs")
     header_row(ws, yk_row + 1, ["Year", "GMV (R$ M)", "Orders", "Avg Review", "Avg Delivery (days)"])
     yearly = read_csv("kpi_yearly.csv")
@@ -757,12 +745,6 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
     pm_end = pm_row + 1 + len(payments)
     add_table(ws, f"B{pm_row + 1}:E{pm_end}", "tbl_payment")
 
-    note = ws.cell(row=pm_end + 1, column=2,
-                   value="Note: 'boleto' is a Brazil-only cash voucher printed at convenience stores. "
-                         "1–3 day payment lag affects fulfillment timing.")
-    note.font = font(italic=True, color=DARK_GRAY)
-    note.alignment = left()
-
     ws.freeze_panes = "B5"
 
 
@@ -774,9 +756,7 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 14, "C": 18, "D": 2})
 
-    title_block(ws, 2, "Monthly Revenue Trend (2017–2018)",
-                "All values referenced from _data_calc!tbl_revenue. Edit data once → chart updates.",
-                span=2)
+    title_block(ws, 2, "Monthly Revenue Trend (2017–2018)", span=2)
 
     rev = read_csv("revenue.csv")
     header_row(ws, 5, ["Month", "Revenue (R$)"])
@@ -805,21 +785,6 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
     chart.style = 12
     ws.add_chart(chart, "E5")
 
-    # Insights
-    ir = end_row + 3
-    section_header(ws, ir, "KEY INSIGHTS")
-    insights = [
-        "Peak: Nov 2017 ≈ R$ 988K (Black Friday + Christmas)",
-        "2018 stable plateau: R$ 0.7M – 1.0M monthly",
-        "2018-09 onwards = data truncation, not real decline",
-        "Top 3 categories drive revenue: health_beauty, watches_gifts, bed_bath_table",
-        "Recommendation: front-load marketing budget pre-Q4; concentrate inventory on top-3 categories",
-    ]
-    for i, t in enumerate(insights):
-        c = ws.cell(row=ir + 1 + i, column=2, value=f"• {t}")
-        c.font = font()
-        c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-
     ws.freeze_panes = "B6"
 
 
@@ -831,8 +796,8 @@ def build_rfm(wb: Workbook, refs: dict) -> None:
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 22, "C": 14, "D": 14, "E": 14, "F": 14, "G": 18, "H": 14, "I": 32, "J": 2})
 
-    title_block(ws, 2, "RFM Customer Segmentation (NTILE Window Function)",
-                "Pareto: Champions (16%) + At-Risk (24%) = 40% of customers, 67% of revenue.",
+    title_block(ws, 2, "RFM Customer Segmentation",
+                "Champions + At-Risk = 40% customers, 67% revenue.",
                 span=8)
 
     persona_map = {
@@ -918,32 +883,6 @@ def build_rfm(wb: Workbook, refs: dict) -> None:
     chart.set_categories(cats)
     ws.add_chart(chart, f"B{end_row + 3}")
 
-    # Insights section
-    ir = end_row + 22
-    section_header(ws, ir, "FOUR BUSINESS INSIGHTS")
-    insights = [
-        "1. Pareto holds — Champions (16%) + At-Risk (24%) = 40% of customers but 67% of revenue",
-        "2. Biggest lever is WIN-BACK, not acquisition — At-Risk owns 35.5% of revenue and 21,975 wallets",
-        "3. Champions ARPU (R$ 274) is 2× platform avg — VIP program + cross-category recommendation candidate",
-        "4. CRITICAL — Frequency ≈ 1.0 across ALL segments. Olist is acquisition-driven, not retention-driven",
-    ]
-    for i, t in enumerate(insights):
-        c = ws.cell(row=ir + 1 + i, column=2, value=t)
-        c.font = font()
-        c.alignment = left()
-
-    ir2 = ir + len(insights) + 2
-    section_header(ws, ir2, "WHY RULE-BASED, NOT K-MEANS?")
-    why = [
-        "1. Business interpretability — marketing teams understand 'At Risk' but not 'Cluster 3'",
-        "2. F dimension has no variance (median = 1.0); K-Means would create meaningless clusters",
-        "3. Stable thresholds year-over-year — K-Means re-trains drift segment definitions",
-    ]
-    for i, t in enumerate(why):
-        c = ws.cell(row=ir2 + 1 + i, column=2, value=t)
-        c.font = font()
-        c.alignment = left()
-
     ws.freeze_panes = "B6"
 
 
@@ -954,9 +893,8 @@ def build_cohort(wb: Workbook, refs: dict) -> None:
     ws = wb.create_sheet("08_Cohort_Heatmap")
     ws.sheet_view.showGridLines = False
 
-    title_block(ws, 2, "Cohort Retention Heatmap — Proof of F=1.0",
-                "Cell value = % of cohort active in month N. "
-                "Healthy e-commerce = 5–15% at M1. Olist = 0.2–0.7%.",
+    title_block(ws, 2, "Cohort Retention Heatmap",
+                "Cell = % of cohort active in month N (benchmark M1: 5-15%).",
                 span=14)
 
     months = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10", "M11", "M12"]
@@ -990,22 +928,6 @@ def build_cohort(wb: Workbook, refs: dict) -> None:
     )
     ws.conditional_formatting.add(f"D6:O{end_row}", rule)
 
-    # Insights
-    ir = end_row + 3
-    section_header(ws, ir, "KEY READINGS")
-    insights = [
-        "M0 = 100% by definition (everyone bought in their cohort month)",
-        "M1 = 0.2–0.7% across nearly all cohorts → 99%+ never come back next month",
-        "Mature e-commerce benchmark: M1 ≈ 5–15%. Olist is 1–2 orders of magnitude below",
-        "93,358 unique customers → only 1,693 (1.81%) bought in more than one month",
-        "Implication: this is not a 'low retention' problem — retention essentially does not exist",
-        "Hypotheses for v2: (a) Brazil-wide e-comm pattern? (b) Product mix skewed to one-time durables? (c) No loyalty program?",
-    ]
-    for i, t in enumerate(insights):
-        c = ws.cell(row=ir + 1 + i, column=2, value=f"• {t}")
-        c.font = font()
-        c.alignment = left()
-
     ws.freeze_panes = "C6"
 
 
@@ -1018,8 +940,7 @@ def build_roi(wb: Workbook) -> None:
     set_col_widths(ws, {"A": 2, "B": 32, "C": 18, "D": 18, "E": 18, "F": 18, "G": 18, "H": 2})
 
     title_block(ws, 2, "At-Risk Win-back ROI Calculator",
-                "Edit the YELLOW cells. All scenario columns recompute live. "
-                "Inputs are exposed as Named Ranges (At_Risk_Count, ARPU, Repeat_Spend, CRM_Cost).",
+                "Edit yellow cells — scenarios recompute live.",
                 span=6)
 
     # ---- Inputs ----
@@ -1138,18 +1059,6 @@ def build_roi(wb: Workbook) -> None:
     ws.cell(row=24, column=2,
             value="ROI                  =  Incremental revenue ÷ CRM_Cost").font = font(italic=True)
 
-    # Action priority
-    section_header(ws, 26, "ACTION PRIORITY")
-    actions = [
-        "1. Wave 1: personalized EDM by historical category to all 21,975 at-risk customers (~R$ 50K)",
-        "2. Track funnel: open → click → conversion → incremental revenue vs. holdout",
-        "3. If recall rate > 8%: 2× budget, add SMS + retargeting touchpoints",
-        "4. If recall rate < 3%: switch lever from discount to free shipping (esp. for remote states)",
-    ]
-    for i, t in enumerate(actions):
-        c = ws.cell(row=27 + i, column=2, value=t)
-        c.font = font()
-        c.alignment = left()
 
 
 # ============================================================================
@@ -1160,9 +1069,8 @@ def build_installments(wb: Workbook, refs: dict) -> None:
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 22, "C": 14, "D": 18, "E": 14, "F": 18, "G": 2})
 
-    title_block(ws, 2, "Brazil's Installment Culture — The Hidden CRM Lever",
-                "73.9% of orders use credit_card, avg 3.5 installments. "
-                "Question: does longer financing → higher AOV and higher repeat?",
+    title_block(ws, 2, "Installments — AOV & Repeat Rate by Bucket",
+                "73.9% of orders use credit_card, avg 3.5 installments.",
                 span=5)
 
     inst = read_csv("installments.csv")
@@ -1220,23 +1128,6 @@ def build_installments(wb: Workbook, refs: dict) -> None:
     bar2.set_categories(cats)
     ws.add_chart(bar2, f"B{end_row + 22}")
 
-    # Insights
-    ir = end_row + 41
-    section_header(ws, ir, "TWO FINDINGS & FOUR LEVERS")
-    findings = [
-        "Revenue lever — 7-10 installments AOV is 3.48× single payment (R$ 334 vs R$ 96). Linear, no inversion.",
-        "Retention lever — 7-10 installment customers repeat 65% more often (4.13% vs 2.51%).",
-        "Why? Multi-month installment ledger keeps customers transactionally engaged → invisible CRM.",
-        "Action 1: promote 7+ installment plans on home + checkout (currently only 15% of credit-card orders).",
-        "Action 2: send 'no-interest installment' EDM to single-payment customers on second visit.",
-        "Action 3: negotiate longer interest-free terms with issuers (8 months sweet spot, n=4,268; test 12).",
-        "Caveat: causality not proven — could be 'high ticket → must installment'. A/B test installment availability on same SKU page.",
-    ]
-    for i, t in enumerate(findings):
-        c = ws.cell(row=ir + 1 + i, column=2, value=f"• {t}")
-        c.font = font()
-        c.alignment = left()
-
     ws.freeze_panes = "B6"
 
 
@@ -1249,8 +1140,7 @@ def build_logistics(wb: Workbook, refs: dict) -> None:
     set_col_widths(ws, {"A": 2, "B": 12, "C": 18, "D": 18, "E": 18, "F": 2})
 
     title_block(ws, 2, "Logistics — Estimated vs Actual Delivery (by State)",
-                "National avg actual = 15.4 days. ETA avg = 24 days. "
-                "Platform under-promises by 36% — opportunity to tighten ETA messaging.",
+                "National avg: 15.4 actual / 24 ETA days (36% under-promise).",
                 span=4)
 
     log = read_csv("logistics.csv")
@@ -1299,20 +1189,6 @@ def build_logistics(wb: Workbook, refs: dict) -> None:
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
     ws.add_chart(chart, "G5")
-
-    # Insights
-    ir = end_row + 3
-    section_header(ws, ir, "LOGISTICS INSIGHTS")
-    insights = [
-        "SP (8.8d) vs RN (19.3d) = 2.2× state-level gap. Replicate SP fulfillment model in high-order states.",
-        "Platform-wide ETA is conservative by 36%. Marketing pages can show tighter promises → conversion lift.",
-        "Cross-analyze 1-star reviews with delivery delay > ETA to quantify NPS impact.",
-        "Remote states need free-shipping levers (per ROI sheet's 'switch to free shipping' branch).",
-    ]
-    for i, t in enumerate(insights):
-        c = ws.cell(row=ir + 1 + i, column=2, value=f"• {t}")
-        c.font = font()
-        c.alignment = left()
 
     ws.freeze_panes = "B6"
 
@@ -1407,37 +1283,26 @@ def build_methodology(wb: Workbook) -> None:
         ws.cell(row=r, column=4).border = BORDER
     add_table(ws, f"B18:D{18 + len(table)}", "tbl_compare_ntile")
 
-    section_header(ws, 24, "Caveats & next steps (honest disclosure)")
+    section_header(ws, 24, "Caveats")
     caveats = [
-        "F dimension has near-zero variance — segmentation is effectively R × M. Acknowledged in v1.",
-        "'Loyal' segment ARPU is low (R$ 89) because the rule sets R≥4, F≥3 without M floor — v2 adds M condition.",
-        "2018 data truncated at 2018-10. Apparent post-Sep dip is data cutoff, not real decline.",
-        "Causality between installments → AOV not established — needs A/B test on identical SKU pages.",
-        "Next: review-score vs. delivery-delay correlation (Pearson/Spearman); Prophet/ARIMA forecast.",
+        "F dimension near-zero variance — segmentation effectively R × M.",
+        "2018 data truncated at 2018-10 (post-Sep dip = cutoff, not decline).",
+        "Installments → AOV causality not established (needs A/B test).",
     ]
     for i, t in enumerate(caveats):
         c = ws.cell(row=25 + i, column=2, value=f"• {t}")
-        c.font = font()
-        c.alignment = left()
+        c.font = font(); c.alignment = left()
 
-    # Upgrade path — manual Excel UI steps for senior signal
-    section_header(ws, 32, "Upgrade path to Power Query / Power Pivot (manual)")
+    section_header(ws, 30, "Upgrade path (manual)")
     upgrade = [
-        "Power Query (ETL): Data → Get Data → From Folder → point at /data → load each CSV as a Query → "
-        "use the ribbon to remove unused cols, rename, set types. Saves 'M' code that re-runs on Refresh All.",
-        "Power Pivot (model): File → Options → Add-ins → Power Pivot. Add each Query to Data Model. "
-        "Build relationships: orders[customer_id]→customers, items[order_id]→orders, payments[order_id]→orders.",
-        "DAX measures: in Power Pivot, write `Total Revenue := SUMX(items, items[price] + items[freight_value])`, "
-        "`AOV := DIVIDE([Total Revenue], DISTINCTCOUNT(orders[order_id]))`, `Repeat % := …`.",
-        "KPI cards: on dashboard sheets use `=CUBEVALUE(\"ThisWorkbookDataModel\", \"[Measures].[Total Revenue]\")` "
-        "instead of literal numbers. Reviewer presses Refresh All → entire workbook re-computes from raw.",
-        "Why this matters: openpyxl can build Tables / Conditional Formatting / Named Ranges / Formulas, but "
-        "Power Query and Power Pivot live in Excel's UI and are the senior-analyst signal.",
+        "Power Query: Data → Get Data → From Folder → /data. Each CSV becomes a Query.",
+        "Power Pivot: load Queries to Data Model. Build orders→customers, items→orders, payments→orders.",
+        "DAX measure: `Total Revenue := SUMX(items, items[price] + items[freight_value])`.",
+        "Dashboard: replace literals with `=CUBEVALUE(\"ThisWorkbookDataModel\", \"[Measures].[…]\")`.",
     ]
     for i, t in enumerate(upgrade):
-        c = ws.cell(row=33 + i, column=2, value=f"• {t}")
-        c.font = font()
-        c.alignment = left()
+        c = ws.cell(row=31 + i, column=2, value=f"• {t}")
+        c.font = font(); c.alignment = left()
 
 
 # ============================================================================
@@ -1451,18 +1316,12 @@ def build_pivot_analysis(wb: Workbook) -> None:
         "I": 4, "J": 14, "K": 14, "L": 12, "M": 4, "N": 26, "O": 26, "P": 2,
     })
 
-    title_block(ws, 2,
-                "Lookup & Pivot Demo",
-                "Three ways to do the same lookup (row 8-12) + a SUMIFS pivot (row 25+).",
-                span=14)
+    title_block(ws, 2, "Lookup & Pivot Demo", span=14)
 
     # =============================================================
     # SECTION A — Lookup demo: 5 rows, 3 methods side-by-side
     # =============================================================
-    section_header(ws, 5, "A. Lookup demo — translate PT category → EN, three ways")
-    ws.cell(row=6, column=2,
-            value="Goal: given a Portuguese category name, return its English label. "
-                  "Three formulas below produce the same answer.").font = font(italic=True, size=10, color=DARK_GRAY)
+    section_header(ws, 5, "A. Lookup — PT category → EN (3 methods, same result)")
 
     # Source table (right side) — keep all 71 rows so the lookup has real data
     translation = read_category_translation()
@@ -1527,10 +1386,7 @@ def build_pivot_analysis(wb: Workbook) -> None:
     # =============================================================
     # SECTION B — PivotTable equivalent: State × Payment Type
     # =============================================================
-    section_header(ws, 24, "Section B — SUMIFS PivotTable: Order count by State × Payment Type")
-    ws.cell(row=25, column=2,
-            value="Long-form source aggregated from 99K orders + 96K customers + 104K payment lines. "
-                  "Pivot below uses SUMIFS — same result you'd get from Insert → PivotTable.").font = font(italic=True, size=10, color=DARK_GRAY)
+    section_header(ws, 24, "B. SUMIFS pivot — orders by State × Payment Type")
 
     # Compute aggregation
     states, ptypes, pivot_data = aggregate_state_payment()
@@ -1622,23 +1478,6 @@ def build_pivot_analysis(wb: Workbook) -> None:
             end_type="max", end_color=ORANGE,
         ),
     )
-
-    # Methodology note
-    note_row = total_row + 3
-    section_header(ws, note_row, "How this compares to a real PivotTable")
-    notes = [
-        "SUMIFS pivot above: same numbers a real PivotTable would produce, computed via formulas. "
-        "Visible to reviewers + auditable cell by cell.",
-        "Real PivotTable (1-click): select tbl_payments_long → Insert → PivotTable. Drag State to Rows, "
-        "Payment type to Columns, Orders to Values. Slicer / Timeline come for free.",
-        "Power Pivot version (senior signal): load all 9 raw CSVs into the Data Model, write DAX measure "
-        "`Order Count := DISTINCTCOUNT(orders[order_id])`, drive any pivot from one measure.",
-        "See sheet 12_Methodology for step-by-step Power Query / Power Pivot upgrade path.",
-    ]
-    for i, t in enumerate(notes):
-        c = ws.cell(row=note_row + 1 + i, column=2, value=f"• {t}")
-        c.font = font()
-        c.alignment = left()
 
     ws.freeze_panes = "B6"
 
