@@ -1,11 +1,11 @@
 """Generate output/portfolio.xlsx — 13-sheet industry-standard Excel portfolio.
 
 Sheet layout (12 visible + 1 hidden):
-  01_Cover, 02_TOC, 03_Data_Dictionary
+  01_Cover, 02_TOC, 02_Data_Dictionary
   04_Executive_Summary
-  05_KPI_Dashboard, 06_Revenue_Trend, 07_RFM_Segments, 08_Cohort_Heatmap
-  09_ROI_Calculator (live formulas)
-  10_Installments, 11_Logistics
+  03_KPI_Dashboard, 04_Revenue_Trend, 05_RFM_Segments, 06_Cohort_Heatmap
+  07_ROI_Calculator (live formulas)
+  08_Installments, 09_Logistics
   12_Methodology
   + hidden helper: _data_calc (central data hub; visible sheets pull values from here)
 
@@ -580,72 +580,22 @@ def build_cover(wb: Workbook, refs: dict) -> None:
         c3.alignment = center()
         c3.border = BORDER
 
-    # Live links
-    section_header(ws, 16, "LIVE LINKS")
-    links = [
-        ("Streamlit App", "https://olist-jenho.streamlit.app/",
-         "Interactive 5-page dashboard with ROI calculator"),
-        ("HTML Dashboard", "https://kengkeng44.github.io/olist-project/",
-         "Static GitHub Pages site"),
-        ("Tableau Public",
-         "https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes",
-         "Tableau visualization"),
-        ("GitHub Repo", "https://github.com/kengkeng44/olist-project",
-         "Full source code + Notebook + SQL"),
-        ("Pitch Deck (PDF)",
-         "https://github.com/kengkeng44/olist-project/blob/master/slides/portfolio.pdf",
-         "13-slide PM-style deck"),
+    # ---- TOC (merged from old 02_TOC) ----
+    section_header(ws, 16, "SHEETS IN THIS WORKBOOK")
+    header_row(ws, 17, ["#", "Sheet", "What it shows"])
+    toc_entries = [
+        ("02", "02_Data_Dictionary", "9-table schema + 3-row samples"),
+        ("03", "03_KPI_Dashboard", "Scale / Yearly KPIs / Status / Payment — XLOOKUP"),
+        ("04", "04_Revenue_Trend", "Monthly revenue + line chart"),
+        ("05", "05_RFM_Segments", "RFM segments (NTILE) + Pareto + icon set"),
+        ("06", "06_Cohort_Heatmap", "13-month retention matrix (color scale)"),
+        ("07", "07_ROI_Calculator", "Live formulas + Named Ranges"),
+        ("08", "08_Installments", "AOV + repeat rate by installment bucket"),
+        ("09", "09_Logistics", "State ETA gap with 3-color scale"),
+        ("10", "10_Pivot_Analysis", "Real PivotTable: state x payment_type"),
     ]
-    header_row(ws, 17, ["Resource", "URL", "What you'll find"])
-    for i, (label, url, desc) in enumerate(links):
+    for i, (num, sheet, desc) in enumerate(toc_entries):
         r = 18 + i
-        ws.cell(row=r, column=2, value=label).font = font(bold=True)
-        c = ws.cell(row=r, column=3, value=url)
-        c.hyperlink = url
-        c.font = font(color="0563C1")
-        c.alignment = left()
-        ws.cell(row=r, column=4, value=desc).alignment = left()
-        for col in (2, 3, 4):
-            ws.cell(row=r, column=col).border = BORDER
-
-    # Tech stack chips
-    section_header(ws, 25, "TECH STACK")
-    stack = ["Python", "SQLite", "SQL (NTILE Window)", "pandas", "matplotlib", "Streamlit", "Tableau"]
-    for i, t in enumerate(stack):
-        c = ws.cell(row=26 + i // 4, column=2 + i % 4, value=t)
-        c.font = font(bold=True, color=NAVY)
-        c.fill = fill(ACCENT_YELLOW)
-        c.alignment = center()
-        c.border = BORDER
-
-
-# ============================================================================
-# 02_TOC
-# ============================================================================
-def build_toc(wb: Workbook) -> None:
-    ws = wb.create_sheet("02_TOC")
-    ws.sheet_view.showGridLines = False
-    set_col_widths(ws, {"A": 2, "B": 6, "C": 30, "D": 56, "E": 2})
-
-    title_block(ws, 2, "Table of Contents", span=4)
-
-    header_row(ws, 5, ["#", "Sheet", "What it shows"])
-    entries = [
-        ("01", "01_Cover", "Headline cards (formula-driven) + live links"),
-        ("02", "02_TOC", "This page"),
-        ("03", "03_Data_Dictionary", "9-table schema + 3-row samples"),
-        ("04", "04_Brief", "Exec summary + core SQL (NTILE) + caveats + upgrade path"),
-        ("05", "05_KPI_Dashboard", "Scale / Yearly KPIs / Status / Payment — XLOOKUP from _data_calc"),
-        ("06", "06_Revenue_Trend", "Monthly revenue + line chart"),
-        ("07", "07_RFM_Segments", "RFM segments (NTILE) + Pareto chart + icon set"),
-        ("08", "08_Cohort_Heatmap", "13-month retention matrix with color scale"),
-        ("09", "09_ROI_Calculator", "Live formulas + Named Ranges (At_Risk_Count / ARPU / …)"),
-        ("10", "10_Installments", "AOV + repeat rate by installment bucket"),
-        ("11", "11_Logistics", "State ETA gap with 3-color scale"),
-        ("12", "12_Pivot_Analysis", "VLOOKUP / INDEX-MATCH / XLOOKUP demo + real PivotTable"),
-    ]
-    for i, (num, sheet, desc) in enumerate(entries):
-        r = 6 + i
         ws.cell(row=r, column=2, value=num).alignment = center()
         c = ws.cell(row=r, column=3, value=sheet)
         c.font = font(bold=True, color="0563C1")
@@ -655,14 +605,51 @@ def build_toc(wb: Workbook) -> None:
         for col in (2, 3, 4):
             ws.cell(row=r, column=col).border = BORDER
 
-    ws.freeze_panes = "B6"
+    # ---- Live links ----
+    links_row = 18 + len(toc_entries) + 2
+    section_header(ws, links_row, "LIVE LINKS")
+    links = [
+        ("Streamlit App", "https://olist-jenho.streamlit.app/",
+         "Interactive 5-page dashboard"),
+        ("HTML Dashboard", "https://kengkeng44.github.io/olist-project/",
+         "Static GitHub Pages"),
+        ("Tableau Public",
+         "https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes",
+         "Tableau version"),
+        ("GitHub Repo", "https://github.com/kengkeng44/olist-project",
+         "Full source + SQL + notebook"),
+        ("Pitch Deck", "https://github.com/kengkeng44/olist-project/blob/master/slides/portfolio.pdf",
+         "13-slide PM deck"),
+    ]
+    header_row(ws, links_row + 1, ["Resource", "URL", "Description"])
+    for i, (label, url, desc) in enumerate(links):
+        r = links_row + 2 + i
+        ws.cell(row=r, column=2, value=label).font = font(bold=True)
+        c = ws.cell(row=r, column=3, value=url)
+        c.hyperlink = url
+        c.font = font(color="0563C1")
+        c.alignment = left()
+        ws.cell(row=r, column=4, value=desc).alignment = left()
+        for col in (2, 3, 4):
+            ws.cell(row=r, column=col).border = BORDER
+
+    # ---- Tech stack chips ----
+    stack_row = links_row + 2 + len(links) + 2
+    section_header(ws, stack_row, "TECH STACK")
+    stack = ["Python", "SQLite", "SQL (NTILE)", "pandas", "matplotlib", "Streamlit", "Tableau"]
+    for i, t in enumerate(stack):
+        c = ws.cell(row=stack_row + 1 + i // 4, column=2 + i % 4, value=t)
+        c.font = font(bold=True, color=NAVY)
+        c.fill = fill(ACCENT_YELLOW)
+        c.alignment = center()
+        c.border = BORDER
 
 
 # ============================================================================
-# 03_Data_Dictionary
+# 02_Data_Dictionary
 # ============================================================================
 def build_data_dictionary(wb: Workbook) -> None:
-    ws = wb.create_sheet("03_Data_Dictionary")
+    ws = wb.create_sheet("02_Data_Dictionary")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 26, "C": 14, "D": 44, "E": 2})
 
@@ -726,7 +713,11 @@ def build_data_dictionary(wb: Workbook) -> None:
         for ri, row in enumerate(rows):
             r = cur_row + 1 + ri
             for ci, val in enumerate(row):
-                cell = ws.cell(row=r, column=2 + ci, value=val)
+                # Try numeric coercion so Excel stops flagging "number stored as text"
+                typed: int | float | str = val
+                if val and val.lstrip("-").replace(".", "", 1).isdigit():
+                    typed = float(val) if "." in val else int(val)
+                cell = ws.cell(row=r, column=2 + ci, value=typed)
                 cell.font = Font(name="Consolas", size=9)
                 cell.border = BORDER
                 cell.alignment = left()
@@ -739,104 +730,10 @@ def build_data_dictionary(wb: Workbook) -> None:
 
 
 # ============================================================================
-# 04_Brief — Executive Summary + Methodology, merged
-# ============================================================================
-def build_brief(wb: Workbook) -> None:
-    ws = wb.create_sheet("04_Brief")
-    ws.sheet_view.showGridLines = False
-    set_col_widths(ws, {"A": 2, "B": 18, "C": 60, "D": 2})
-
-    title_block(ws, 2, "Brief & Methodology", span=2)
-
-    # ---- Executive summary blocks ----
-    blocks = [
-        ("Question",
-         "Brazil's largest SMB marketplace (Olist, 12,000+ sellers) released 99K orders 2016–2018. "
-         "Where can the platform unlock the biggest revenue lever next quarter?"),
-        ("Method",
-         "9-table SQLite schema · SQL Window Functions (NTILE) for RFM scoring · Cohort retention · "
-         "Installment-bucket analysis · Quantified ROI scenarios."),
-        ("Finding 1 — Pareto",
-         "Champions (16% of customers) + At-Risk (24%) drive 67% of revenue."),
-        ("Finding 2 — Retention crisis",
-         "Cross-month repeat rate is 1.81%. Olist is acquisition-driven, not retention-driven."),
-        ("Finding 3 — Installments = hidden CRM",
-         "7–10 installments customers: 3.48× ARPU, 65% higher repeat rate than single-payment."),
-        ("Recommendation",
-         "Personalized win-back EDM to 21,975 At-Risk customers (≈ R$ 50K). 5% recall = R$ 117K (2.3× ROI). "
-         "20% = R$ 469K (9.4× ROI)."),
-    ]
-    for i, (label, body) in enumerate(blocks):
-        r = 5 + i
-        ws.row_dimensions[r].height = 48
-        cell_l = ws.cell(row=r, column=2, value=label)
-        cell_l.font = font(bold=True, color=WHITE)
-        cell_l.fill = fill(NAVY if i < 2 else (TEAL if i < 5 else ORANGE))
-        cell_l.alignment = center()
-        cell_l.border = BORDER
-        cell_b = ws.cell(row=r, column=3, value=body)
-        cell_b.font = font(size=11)
-        cell_b.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        cell_b.fill = fill(LIGHT_GRAY)
-        cell_b.border = BORDER
-
-    # ---- Core SQL (NTILE window function) ----
-    sql_section_row = 5 + len(blocks) + 2
-    section_header(ws, sql_section_row, "Core SQL — RFM with NTILE window function")
-    sql = (
-        "WITH rfm_base AS (\n"
-        "    SELECT c.customer_unique_id,\n"
-        "           ROUND(JULIANDAY(MAX(snapshot)) - JULIANDAY(MAX(o.order_purchase_timestamp)),0) AS r_days,\n"
-        "           COUNT(DISTINCT o.order_id) AS f,\n"
-        "           ROUND(SUM(oi.price),2) AS m\n"
-        "    FROM orders o JOIN order_items oi USING(order_id)\n"
-        "                  JOIN customers c USING(customer_id)\n"
-        "    WHERE o.order_status='delivered' GROUP BY c.customer_unique_id\n"
-        ")\n"
-        "SELECT *,\n"
-        "    NTILE(5) OVER (ORDER BY r_days DESC) AS r,\n"
-        "    NTILE(5) OVER (ORDER BY f       ASC) AS f_score,\n"
-        "    NTILE(5) OVER (ORDER BY m       ASC) AS m_score\n"
-        "FROM rfm_base;"
-    )
-    sc = ws.cell(row=sql_section_row + 1, column=2, value=sql)
-    sc.font = Font(name="Consolas", size=9)
-    sc.alignment = Alignment(wrap_text=True, vertical="top")
-    sc.fill = fill(LIGHT_GRAY)
-    sc.border = BORDER
-    ws.row_dimensions[sql_section_row + 1].height = 220
-
-    # ---- Caveats ----
-    caveats_row = sql_section_row + 3
-    section_header(ws, caveats_row, "Caveats")
-    caveats = [
-        "F dimension near-zero variance — segmentation effectively R × M.",
-        "2018 data truncated at 2018-10 (post-Sep dip = cutoff, not decline).",
-        "Installments → AOV causality not established (needs A/B test).",
-    ]
-    for i, t in enumerate(caveats):
-        c = ws.cell(row=caveats_row + 1 + i, column=2, value=f"• {t}")
-        c.font = font(); c.alignment = left()
-
-    # ---- Upgrade path ----
-    upgrade_row = caveats_row + len(caveats) + 2
-    section_header(ws, upgrade_row, "Upgrade path (manual Excel UI)")
-    upgrade = [
-        "Power Query: Data → Get Data → From Folder → load each CSV as a Query.",
-        "Power Pivot: load Queries to Data Model. Build orders→customers, items→orders, payments→orders.",
-        "DAX: `Total Revenue := SUMX(items, items[price] + items[freight_value])`.",
-        "Dashboard: replace literals with `=CUBEVALUE(\"ThisWorkbookDataModel\", \"[Measures].[…]\")`.",
-    ]
-    for i, t in enumerate(upgrade):
-        c = ws.cell(row=upgrade_row + 1 + i, column=2, value=f"• {t}")
-        c.font = font(); c.alignment = left()
-
-
-# ============================================================================
-# 05_KPI_Dashboard — formulas reference _data_calc
+# 03_KPI_Dashboard — formulas reference _data_calc
 # ============================================================================
 def build_kpis(wb: Workbook, refs: dict) -> None:
-    ws = wb.create_sheet("05_KPI_Dashboard")
+    ws = wb.create_sheet("03_KPI_Dashboard")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 32, "C": 18, "D": 18, "E": 18, "F": 18, "G": 2})
 
@@ -869,23 +766,28 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
 
     overview_end = 6 + len(overview_metrics)
 
-    # ---- Yearly KPIs (formula-driven from tbl_yearly) ----
+    # ---- Yearly KPIs — XLOOKUP by year (visible function, year-order independent) ----
     yk_row = overview_end + 3
     section_header(ws, yk_row, "Year-over-Year KPIs")
     header_row(ws, yk_row + 1, ["Year", "GMV (R$ M)", "Orders", "Avg Review", "Avg Delivery (days)"])
     yearly = read_csv("kpi_yearly.csv")
-    for i in range(len(yearly)):
+    src_year_keys = f"_data_calc!$A${refs['yearly_start']}:$A${refs['yearly_end']}"
+    yk_cols = ["B", "C", "D", "E"]   # GMV, Orders, Review, Delivery
+    yk_fmts = ["0.00", "#,##0", "0.00", "0.00"]
+    years = [int(row["年份"]) for row in yearly]
+    for i, yr in enumerate(years):
         r = yk_row + 2 + i
-        src_row = refs["yearly_start"] + i  # noqa: F841
-        for ci, src_col in enumerate("ABCDE"):
-            cell = ws.cell(row=r, column=2 + ci,
-                           value=f"=_data_calc!{src_col}{refs['yearly_start'] + i}")
+        # Year (literal — XLOOKUP key)
+        ws.cell(row=r, column=2, value=yr).border = BORDER
+        ws.cell(row=r, column=2).alignment = left()
+        # 4 metric columns via XLOOKUP keyed by year
+        for ci, (src_col, fmt) in enumerate(zip(yk_cols, yk_fmts)):
+            src_range = f"_data_calc!${src_col}${refs['yearly_start']}:${src_col}${refs['yearly_end']}"
+            cell = ws.cell(row=r, column=3 + ci,
+                           value=f'=_xlfn.XLOOKUP(B{r},{src_year_keys},{src_range},0)')
+            cell.number_format = fmt
             cell.border = BORDER
-            cell.alignment = center() if ci > 0 else left()
-        ws.cell(row=r, column=3).number_format = "0.00"
-        ws.cell(row=r, column=4).number_format = "#,##0"
-        ws.cell(row=r, column=5).number_format = "0.00"
-        ws.cell(row=r, column=6).number_format = "0.00"
+            cell.alignment = center()
 
     # ---- Order Status — pulled via XLOOKUP + SUMIFS from _data_calc ----
     st_row = yk_row + 2 + len(yearly) + 2
@@ -937,10 +839,10 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
 
 
 # ============================================================================
-# 06_Revenue_Trend — formulas + Excel Table + chart
+# 04_Revenue_Trend — formulas + Excel Table + chart
 # ============================================================================
 def build_revenue(wb: Workbook, refs: dict) -> None:
-    ws = wb.create_sheet("06_Revenue_Trend")
+    ws = wb.create_sheet("04_Revenue_Trend")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 14, "C": 18, "D": 2})
 
@@ -948,15 +850,16 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
 
     rev = read_csv("revenue.csv")
     header_row(ws, 5, ["Month", "Revenue (R$)"])
-    for i in range(len(rev)):
+    src_months = f"_data_calc!$A${refs['rev_start']}:$A${refs['rev_end']}"
+    src_rev = f"_data_calc!$B${refs['rev_start']}:$B${refs['rev_end']}"
+    months = [row["月份"] for row in rev]
+    for i, month in enumerate(months):
         r = 6 + i
-        src = refs["rev_start"] + i
-        c1 = ws.cell(row=r, column=2, value=f"=_data_calc!A{src}")
-        c1.border = BORDER
-        c2 = ws.cell(row=r, column=3, value=f"=_data_calc!B{src}")
-        c2.number_format = "#,##0"
-        c2.border = BORDER
-    end_row = 5 + len(rev)
+        ws.cell(row=r, column=2, value=month).border = BORDER
+        cell = ws.cell(row=r, column=3, value=f'=_xlfn.XLOOKUP(B{r},{src_months},{src_rev},0)')
+        cell.number_format = "#,##0"
+        cell.border = BORDER
+    end_row = 5 + len(months)
     add_table(ws, f"B5:C{end_row}", "tbl_revenue_view")
 
     # Line chart
@@ -977,10 +880,10 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
 
 
 # ============================================================================
-# 07_RFM_Segments — formulas, no emoji, icon set conditional formatting
+# 05_RFM_Segments — formulas, no emoji, icon set conditional formatting
 # ============================================================================
 def build_rfm(wb: Workbook, refs: dict) -> None:
-    ws = wb.create_sheet("07_RFM_Segments")
+    ws = wb.create_sheet("05_RFM_Segments")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 22, "C": 14, "D": 14, "E": 14, "F": 14, "G": 18, "H": 14, "I": 32, "J": 2})
 
@@ -1009,28 +912,26 @@ def build_rfm(wb: Workbook, refs: dict) -> None:
     priority = ["冠軍客戶", "流失風險", "忠誠客戶", "一般客戶", "潛力新客", "已流失"]
     rfm_sorted = sorted(rfm, key=lambda r: priority.index(r["segment"]))
 
+    src_seg = f"_data_calc!$A${refs['rfm_start']}:$A${refs['rfm_end']}"
+    rfm_cols = ["B", "C", "D", "E", "F", "G"]   # Customers, %, Rev, %, ARPU, Recency
+    rfm_fmts = ["#,##0", "0.0%", "#,##0", "0.0%", "0", "0"]
     for i, row in enumerate(rfm_sorted):
         r = 6 + i
         en = seg_map[row["segment"]]
-        src = refs["rfm_start"] + i
-        # Segment name (literal — known business label)
+        # Segment name — XLOOKUP key
         ws.cell(row=r, column=2, value=en).font = font(bold=True)
-        # Numeric columns pull from _data_calc
-        for ci, src_col in enumerate("BCDEFG"):
+        ws.cell(row=r, column=2).border = BORDER
+        # 6 numeric columns each via XLOOKUP keyed by segment name
+        for ci, (src_col, fmt) in enumerate(zip(rfm_cols, rfm_fmts)):
+            src_range = f"_data_calc!${src_col}${refs['rfm_start']}:${src_col}${refs['rfm_end']}"
             cell = ws.cell(row=r, column=3 + ci,
-                           value=f"=_data_calc!{src_col}{src}")
+                           value=f'=_xlfn.XLOOKUP(B{r},{src_seg},{src_range},0)')
+            cell.number_format = fmt
             cell.border = BORDER
-        ws.cell(row=r, column=3).number_format = "#,##0"   # Customers
-        ws.cell(row=r, column=4).number_format = "0.0%"    # Customer %
-        ws.cell(row=r, column=5).number_format = "#,##0"   # Revenue
-        ws.cell(row=r, column=6).number_format = "0.0%"    # Revenue %
-        ws.cell(row=r, column=7).number_format = "0"       # ARPU
-        ws.cell(row=r, column=8).number_format = "0"       # Recency
-        # Persona
+        # Persona text — literal
         p = ws.cell(row=r, column=9, value=persona_map[en])
         p.alignment = left()
-        ws.cell(row=r, column=2).border = BORDER
-        ws.cell(row=r, column=9).border = BORDER
+        p.border = BORDER
 
     end_row = 5 + len(rfm_sorted)
     add_table(ws, f"B5:I{end_row}", "tbl_rfm_view")
@@ -1075,10 +976,10 @@ def build_rfm(wb: Workbook, refs: dict) -> None:
 
 
 # ============================================================================
-# 08_Cohort_Heatmap — frozen panes + color scale
+# 06_Cohort_Heatmap — frozen panes + color scale
 # ============================================================================
 def build_cohort(wb: Workbook, refs: dict) -> None:
-    ws = wb.create_sheet("08_Cohort_Heatmap")
+    ws = wb.create_sheet("06_Cohort_Heatmap")
     ws.sheet_view.showGridLines = False
 
     title_block(ws, 2, "Cohort Retention Heatmap",
@@ -1090,22 +991,31 @@ def build_cohort(wb: Workbook, refs: dict) -> None:
     set_col_widths(ws, {"A": 2, "B": 12} | {get_column_letter(i): 8 for i in range(3, 16)})
 
     cohort = read_csv("cohort_retention.csv")
-    for i in range(len(cohort)):
+    cohort_keys = [row["cohort_month"] for row in cohort]
+    # INDEX(MATCH(...), MATCH(...)) — picks the cell at (row=cohort_month, col=month_label)
+    # in the _data_calc cohort matrix. Visible 2D lookup pattern.
+    matrix_range = (f"_data_calc!$B${refs['cohort_start']}:"
+                    f"${get_column_letter(1 + len(months))}${refs['cohort_end']}")
+    cohort_key_range = f"_data_calc!$A${refs['cohort_start']}:$A${refs['cohort_end']}"
+    month_header_range = (f"_data_calc!$B${refs['cohort_start']-1}:"
+                          f"${get_column_letter(1 + len(months))}${refs['cohort_start']-1}")
+    for i, ck in enumerate(cohort_keys):
         r = 6 + i
-        src = refs["cohort_start"] + i
-        ws.cell(row=r, column=2, value=f"=_data_calc!A{src}").font = font(bold=True)
+        # Cohort month (literal — MATCH key)
+        ws.cell(row=r, column=2, value=ck).font = font(bold=True)
         ws.cell(row=r, column=2).fill = fill(LIGHT_GRAY)
         ws.cell(row=r, column=2).border = BORDER
         for j in range(len(months)):
-            src_col = get_column_letter(2 + j)  # B..N in _data_calc
             cell = ws.cell(row=r, column=3 + j,
-                           value=f"=_data_calc!{src_col}{src}")
+                           value=(f"=INDEX({matrix_range},"
+                                  f"MATCH($B{r},{cohort_key_range},0),"
+                                  f"MATCH({get_column_letter(3+j)}$5,{month_header_range},0))"))
             cell.number_format = "0.0%"
             cell.alignment = center()
             cell.border = BORDER
             cell.font = font(size=9)
 
-    end_row = 5 + len(cohort)
+    end_row = 5 + len(cohort_keys)
     add_table(ws, f"B5:O{end_row}", "tbl_cohort_view")
 
     # Color scale on M1+ (skip M0 which is always 100%)
@@ -1120,10 +1030,10 @@ def build_cohort(wb: Workbook, refs: dict) -> None:
 
 
 # ============================================================================
-# 09_ROI_Calculator — Named Ranges + live formulas
+# 07_ROI_Calculator — Named Ranges + live formulas
 # ============================================================================
 def build_roi(wb: Workbook) -> None:
-    ws = wb.create_sheet("09_ROI_Calculator")
+    ws = wb.create_sheet("07_ROI_Calculator")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 32, "C": 18, "D": 18, "E": 18, "F": 18, "G": 18, "H": 2})
 
@@ -1162,24 +1072,28 @@ def build_roi(wb: Workbook) -> None:
         ws.cell(row=r, column=5).border = BORDER
 
     # Named Ranges for inputs (point at the value cells C7..C10)
-    add_named_range(wb, "At_Risk_Count", "09_ROI_Calculator", "$C$7")
-    add_named_range(wb, "ARPU", "09_ROI_Calculator", "$C$8")
-    add_named_range(wb, "Repeat_Spend", "09_ROI_Calculator", "$C$9")
-    add_named_range(wb, "CRM_Cost", "09_ROI_Calculator", "$C$10")
+    add_named_range(wb, "At_Risk_Count", "07_ROI_Calculator", "$C$7")
+    add_named_range(wb, "ARPU", "07_ROI_Calculator", "$C$8")
+    add_named_range(wb, "Repeat_Spend", "07_ROI_Calculator", "$C$9")
+    add_named_range(wb, "CRM_Cost", "07_ROI_Calculator", "$C$10")
 
     # ---- Scenarios ----
     section_header(ws, 13, "SCENARIO OUTPUTS — recomputes live")
     header_row(ws, 14, ["Metric", "Conservative (5%)", "Optimistic (10%)",
                         "Aggressive (20%)", "Custom"])
 
-    scenarios = [("D", 0.05), ("E", 0.10), ("F", 0.20), ("G", 0.10)]
+    # Scenario columns aligned with header columns: C=Conservative, D=Optimistic,
+    # E=Aggressive, F=Custom (yellow = editable). Off-by-one bug fixed here.
+    scenarios = [("C", 0.05), ("D", 0.10), ("E", 0.20), ("F", 0.10)]
+    custom_col = "F"
+
     # Recall rate row
     ws.cell(row=15, column=2, value="Recall rate (%)").font = font(bold=True)
     ws.cell(row=15, column=2).border = BORDER
     for col_letter, default in scenarios:
         col_idx = ord(col_letter) - ord("A") + 1
         c = ws.cell(row=15, column=col_idx, value=default)
-        c.fill = fill(ACCENT_YELLOW if col_letter == "G" else LIGHT_GRAY)
+        c.fill = fill(ACCENT_YELLOW if col_letter == custom_col else LIGHT_GRAY)
         c.number_format = "0%"
         c.alignment = center()
         c.font = font(bold=True)
@@ -1250,10 +1164,10 @@ def build_roi(wb: Workbook) -> None:
 
 
 # ============================================================================
-# 10_Installments — formulas, icon set
+# 08_Installments — formulas, icon set
 # ============================================================================
 def build_installments(wb: Workbook, refs: dict) -> None:
-    ws = wb.create_sheet("10_Installments")
+    ws = wb.create_sheet("08_Installments")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 22, "C": 14, "D": 18, "E": 14, "F": 18, "G": 2})
 
@@ -1263,18 +1177,30 @@ def build_installments(wb: Workbook, refs: dict) -> None:
 
     inst = read_csv("installments.csv")
     header_row(ws, 5, ["Installment bucket", "Orders", "Avg ticket (R$)", "Customers", "Repeat rate"])
-    for i in range(len(inst)):
+    # Source ranges in _data_calc — use XLOOKUP keyed by bucket name so the
+    # function is visible and order-independent.
+    src_buckets = f"_data_calc!$A${refs['inst_start']}:$A${refs['inst_end']}"
+    src_orders = f"_data_calc!$B${refs['inst_start']}:$B${refs['inst_end']}"
+    src_aov = f"_data_calc!$C${refs['inst_start']}:$C${refs['inst_end']}"
+    src_cust = f"_data_calc!$D${refs['inst_start']}:$D${refs['inst_end']}"
+    src_repeat = f"_data_calc!$E${refs['inst_start']}:$E${refs['inst_end']}"
+    bucket_labels = ["1 (single)", "2-3 installments", "4-6 installments",
+                     "7-10 installments", "11+ installments"]
+    for i, label in enumerate(bucket_labels):
         r = 6 + i
-        src = refs["inst_start"] + i
-        for ci, src_col in enumerate("ABCDE"):
-            cell = ws.cell(row=r, column=2 + ci, value=f"=_data_calc!{src_col}{src}")
-            cell.border = BORDER
+        # Bucket name (literal — Excel needs the key for XLOOKUP)
+        ws.cell(row=r, column=2, value=label).border = BORDER
+        # XLOOKUP for each metric — bucket as key
+        ws.cell(row=r, column=3, value=f'=_xlfn.XLOOKUP(B{r},{src_buckets},{src_orders},0)').border = BORDER
         ws.cell(row=r, column=3).number_format = "#,##0"
+        ws.cell(row=r, column=4, value=f'=_xlfn.XLOOKUP(B{r},{src_buckets},{src_aov},0)').border = BORDER
         ws.cell(row=r, column=4).number_format = "0"
+        ws.cell(row=r, column=5, value=f'=_xlfn.XLOOKUP(B{r},{src_buckets},{src_cust},0)').border = BORDER
         ws.cell(row=r, column=5).number_format = "#,##0"
+        ws.cell(row=r, column=6, value=f'=_xlfn.XLOOKUP(B{r},{src_buckets},{src_repeat},0)').border = BORDER
         ws.cell(row=r, column=6).number_format = "0.00%"
 
-    end_row = 5 + len(inst)
+    end_row = 5 + len(bucket_labels)
     add_table(ws, f"B5:F{end_row}", "tbl_inst_view")
 
     # Conditional formatting: data bar on Avg ticket, icon set on Repeat rate
@@ -1320,10 +1246,10 @@ def build_installments(wb: Workbook, refs: dict) -> None:
 
 
 # ============================================================================
-# 11_Logistics — formulas + 3-color scale
+# 09_Logistics — formulas + 3-color scale
 # ============================================================================
 def build_logistics(wb: Workbook, refs: dict) -> None:
-    ws = wb.create_sheet("11_Logistics")
+    ws = wb.create_sheet("09_Logistics")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 12, "C": 18, "D": 18, "E": 18, "F": 2})
 
@@ -1333,18 +1259,25 @@ def build_logistics(wb: Workbook, refs: dict) -> None:
 
     log = read_csv("logistics.csv")
     header_row(ws, 5, ["State", "Actual days", "Estimated days", "ETA gap (days)"])
-    for i in range(len(log)):
+    # XLOOKUP by state code — order-independent, visible function
+    src_states = f"_data_calc!$A${refs['log_start']}:$A${refs['log_end']}"
+    src_actual = f"_data_calc!$B${refs['log_start']}:$B${refs['log_end']}"
+    src_eta = f"_data_calc!$C${refs['log_start']}:$C${refs['log_end']}"
+    src_gap = f"_data_calc!$D${refs['log_start']}:$D${refs['log_end']}"
+    # Pull state codes from raw log csv (they're the keys for XLOOKUP)
+    state_codes = [row["州"] for row in log]
+    for i, state in enumerate(state_codes):
         r = 6 + i
-        src = refs["log_start"] + i
-        for ci, src_col in enumerate("ABCD"):
-            cell = ws.cell(row=r, column=2 + ci, value=f"=_data_calc!{src_col}{src}")
-            cell.border = BORDER
-        ws.cell(row=r, column=2).font = font(bold=True)
+        ws.cell(row=r, column=2, value=state).font = font(bold=True)
+        ws.cell(row=r, column=2).border = BORDER
+        ws.cell(row=r, column=3, value=f'=_xlfn.XLOOKUP(B{r},{src_states},{src_actual},0)').border = BORDER
         ws.cell(row=r, column=3).number_format = "0.0"
+        ws.cell(row=r, column=4, value=f'=_xlfn.XLOOKUP(B{r},{src_states},{src_eta},0)').border = BORDER
         ws.cell(row=r, column=4).number_format = "0.0"
+        ws.cell(row=r, column=5, value=f'=_xlfn.XLOOKUP(B{r},{src_states},{src_gap},0)').border = BORDER
         ws.cell(row=r, column=5).number_format = "0.0"
 
-    end_row = 5 + len(log)
+    end_row = 5 + len(state_codes)
     add_table(ws, f"B5:E{end_row}", "tbl_logistics_view")
 
     # 3-color scale on ETA gap
@@ -1382,95 +1315,22 @@ def build_logistics(wb: Workbook, refs: dict) -> None:
 
 
 # ============================================================================
-# 12_Pivot_Analysis — Lookup demo + real PivotTable (built post-save via win32com)
+# 10_Pivot_Analysis — real PivotTable (built post-save via win32com)
 # ============================================================================
 def build_pivot_analysis(wb: Workbook) -> None:
-    ws = wb.create_sheet("12_Pivot_Analysis")
+    ws = wb.create_sheet("10_Pivot_Analysis")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {
-        "A": 2, "B": 26, "C": 22, "D": 22, "E": 22, "F": 14, "G": 14, "H": 14,
-        "I": 4, "J": 14, "K": 14, "L": 12, "M": 4, "N": 26, "O": 26, "P": 2,
+        "A": 2, "B": 14, "C": 14, "D": 14, "E": 14, "F": 14, "G": 14,
+        "H": 4, "I": 14, "J": 14, "K": 12, "L": 2,
     })
 
-    title_block(ws, 2, "Lookup & Pivot Demo", span=14)
+    title_block(ws, 2, "PivotTable — Orders by State × Payment Type", span=10)
 
-    # =============================================================
-    # SECTION A — Lookup demo: 5 rows, 3 methods side-by-side
-    # =============================================================
-    section_header(ws, 5, "A. Lookup — PT category → EN (3 methods, same result)")
-
-    # Source table (right side) — keep all 71 rows so the lookup has real data
-    translation = read_category_translation()
-    ws.cell(row=5, column=14, value="Source: tbl_category_translation").font = font(bold=True, color=NAVY)
-    header_row(ws, 6, ["PT name", "EN name"], start_col=14)
-    for i, (pt, en) in enumerate(translation):
-        r = 7 + i
-        ws.cell(row=r, column=14, value=pt).font = Font(name="Consolas", size=10)
-        ws.cell(row=r, column=15, value=en).font = Font(name="Consolas", size=10)
-        ws.cell(row=r, column=14).border = BORDER
-        ws.cell(row=r, column=15).border = BORDER
-    trans_end = 6 + len(translation)
-    add_table(ws, f"N6:O{trans_end}", "tbl_category_translation")
-
-    # Demo: 5 PT categories × 3 lookup methods
-    sample_pt = [pt for pt, _ in translation[:5]]
-    header_row(ws, 7, ["PT input", "VLOOKUP result", "INDEX/MATCH result", "XLOOKUP result"])
-    for i, pt in enumerate(sample_pt):
-        r = 8 + i
-        c1 = ws.cell(row=r, column=2, value=pt)
-        c1.font = Font(name="Consolas", size=10); c1.border = BORDER
-        # VLOOKUP — classic, leftmost-only
-        c2 = ws.cell(row=r, column=3,
-                     value=f'=VLOOKUP(B{r},$N$7:$O${trans_end},2,FALSE)')
-        c2.font = Font(name="Consolas", size=10); c2.border = BORDER
-        # INDEX/MATCH — universal, works on every Excel version since 1997
-        c3 = ws.cell(row=r, column=4,
-                     value=f'=INDEX($O$7:$O${trans_end},MATCH(B{r},$N$7:$N${trans_end},0))')
-        c3.font = Font(name="Consolas", size=10); c3.border = BORDER
-        # XLOOKUP — modern (Excel 2021+/365). _xlfn. prefix needed when
-        # written by openpyxl so Excel recognizes the function.
-        c4 = ws.cell(row=r, column=5,
-                     value=f'=_xlfn.XLOOKUP(B{r},$N$7:$N${trans_end},$O$7:$O${trans_end},"not found")')
-        c4.font = Font(name="Consolas", size=10); c4.border = BORDER
-
-    # Compact comparison table directly under the demo
-    section_header(ws, 14, "When to use which")
-    header_row(ws, 15, ["Function", "Excel version", "When to use", "Trade-off"])
-    methods = [
-        ("VLOOKUP", "Any (since 2007)",
-         "Quick lookup when key is in the leftmost column of the source table",
-         "Breaks if columns get reordered (col_index is positional)"),
-        ("INDEX/MATCH", "Any (since 1997)",
-         "Universal fallback; key column can be anywhere in the source",
-         "Slightly more verbose"),
-        ("XLOOKUP", "Excel 2021 / 365 only",
-         "Modern default — readable, supports if_not_found, bidirectional",
-         "Falls back to #NAME? on older Excel"),
-    ]
-    for i, (fn, ver, when, trade) in enumerate(methods):
-        r = 16 + i
-        ws.cell(row=r, column=2, value=fn).font = Font(name="Consolas", size=10, bold=True)
-        ws.cell(row=r, column=3, value=ver).font = font(size=10)
-        ws.cell(row=r, column=4, value=when).font = font(size=10)
-        ws.cell(row=r, column=4).alignment = left()
-        ws.cell(row=r, column=5, value=trade).font = font(size=10)
-        ws.cell(row=r, column=5).alignment = left()
-        for col in (2, 3, 4, 5):
-            ws.cell(row=r, column=col).border = BORDER
-    add_table(ws, f"B15:E{15 + len(methods)}", "tbl_lookup_methods")
-
-    # =============================================================
-    # SECTION B — PivotTable equivalent: State × Payment Type
-    # =============================================================
-    section_header(ws, 24, "B. Real PivotTable — orders by State × Payment Type")
-    ws.cell(row=25, column=2,
-            value="Source: tbl_payments_long (right). PivotTable inserted at B27 by post-build script. "
-                  "Fields: State (rows), Payment type (columns), Orders (sum).").font = font(italic=True, size=9, color=DARK_GRAY)
-
-    # Long-form source table (right) — used as the PivotTable cache source
+    # Long-form source (right side) — feeds the PivotCache
     states, ptypes, pivot_data = aggregate_state_payment()
-    ws.cell(row=24, column=10, value="Source: tbl_payments_long").font = font(bold=True, color=NAVY)
-    header_row(ws, 27, ["State", "Payment type", "Orders"], start_col=10)
+    ws.cell(row=4, column=9, value="Source: tbl_payments_long").font = font(bold=True, color=NAVY)
+    header_row(ws, 5, ["State", "Payment type", "Orders"], start_col=9)
     long_rows: list[tuple[str, str, int]] = []
     for s in states:
         for p in ptypes:
@@ -1478,21 +1338,24 @@ def build_pivot_analysis(wb: Workbook) -> None:
             if v > 0:
                 long_rows.append((s, p, v))
     for i, (s, p, v) in enumerate(long_rows):
-        r = 28 + i
-        ws.cell(row=r, column=10, value=s).border = BORDER
-        ws.cell(row=r, column=11, value=p).border = BORDER
-        c = ws.cell(row=r, column=12, value=v); c.number_format = "#,##0"; c.border = BORDER
-    long_end = 27 + len(long_rows)
-    add_table(ws, f"J27:L{long_end}", "tbl_payments_long")
+        r = 6 + i
+        ws.cell(row=r, column=9, value=s).border = BORDER
+        ws.cell(row=r, column=10, value=p).border = BORDER
+        c = ws.cell(row=r, column=11, value=v); c.number_format = "#,##0"; c.border = BORDER
+    long_end = 5 + len(long_rows)
+    add_table(ws, f"I5:K{long_end}", "tbl_payments_long")
 
-    ws.freeze_panes = "B6"
+    # PivotTable will be inserted at B5 by post-build (add_real_pivottable)
+    ws.cell(row=4, column=2, value="PivotTable (built by Excel COM post-save)").font = font(bold=True, color=NAVY)
+
+    ws.freeze_panes = "B5"
 
 
 # ============================================================================
 # Post-processor: add a real PivotTable via Excel COM (win32com)
 # ============================================================================
 def add_real_pivottable(file_path: Path) -> None:
-    """Open the saved xlsx in Excel, build a PivotTable on 12_Pivot_Analysis
+    """Open the saved xlsx in Excel, build a PivotTable on 10_Pivot_Analysis
     using the tbl_payments_long source, save and quit. Windows + Excel only."""
     import win32com.client as w  # local import: only needed at build time
 
@@ -1505,12 +1368,12 @@ def add_real_pivottable(file_path: Path) -> None:
     excel.DisplayAlerts = False
     try:
         wb = excel.Workbooks.Open(str(file_path.resolve()))
-        ws = wb.Sheets("12_Pivot_Analysis")
+        ws = wb.Sheets("10_Pivot_Analysis")
 
         # Source = the structured table tbl_payments_long
         cache = wb.PivotCaches().Create(SourceType=xlDatabase, SourceData="tbl_payments_long")
-        # Destination cell — a fresh anchor at B27 (left column area)
-        dest = ws.Range("B27")
+        # Destination cell — top-left of the visible pivot area
+        dest = ws.Range("B5")
         pt = cache.CreatePivotTable(TableDestination=dest, TableName="pt_state_payment")
 
         pt.PivotFields("State").Orientation = xlRowField
@@ -1550,9 +1413,7 @@ def main() -> None:
 
     # Visible sheets in display order
     build_cover(wb, refs)
-    build_toc(wb)
     build_data_dictionary(wb)
-    build_brief(wb)
     build_kpis(wb, refs)
     build_revenue(wb, refs)
     build_rfm(wb, refs)
@@ -1563,9 +1424,9 @@ def main() -> None:
     build_pivot_analysis(wb)
 
     sheet_order = [
-        "01_Cover", "02_TOC", "03_Data_Dictionary", "04_Brief",
-        "05_KPI_Dashboard", "06_Revenue_Trend", "07_RFM_Segments", "08_Cohort_Heatmap",
-        "09_ROI_Calculator", "10_Installments", "11_Logistics", "12_Pivot_Analysis",
+        "01_Cover", "02_Data_Dictionary",
+        "03_KPI_Dashboard", "04_Revenue_Trend", "05_RFM_Segments", "06_Cohort_Heatmap",
+        "07_ROI_Calculator", "08_Installments", "09_Logistics", "10_Pivot_Analysis",
         "_data_calc",
     ]
     wb._sheets = [wb[name] for name in sheet_order]
