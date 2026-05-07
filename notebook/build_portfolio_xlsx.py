@@ -201,6 +201,53 @@ def read_category_translation() -> list[tuple[str, str]]:
     return out
 
 
+def aggregate_order_status() -> list[tuple[str, int]]:
+    """Count orders by status from raw orders CSV. Returns sorted list."""
+    from collections import Counter
+    counter: Counter[str] = Counter()
+    with (DATA_DIR / "olist_orders_dataset.csv").open(encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            counter[row["order_status"]] += 1
+    # Roll minor statuses into 'other'
+    keep = {"delivered", "shipped", "canceled", "unavailable"}
+    out: dict[str, int] = {}
+    for status, n in counter.items():
+        if status in keep:
+            out[status] = n
+        else:
+            out["other"] = out.get("other", 0) + n
+    order = ["delivered", "shipped", "canceled", "unavailable", "other"]
+    return [(s, out[s]) for s in order if s in out]
+
+
+def aggregate_payment_mix() -> list[tuple[str, int, float]]:
+    """Count payment_type and avg installments from raw payments CSV.
+    Returns list of (payment_type, order_count, avg_installments) sorted by count desc."""
+    from collections import defaultdict
+    counts: dict[str, set] = defaultdict(set)
+    inst_sum: dict[str, float] = defaultdict(float)
+    inst_n: dict[str, int] = defaultdict(int)
+    with (DATA_DIR / "olist_order_payments_dataset.csv").open(encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            ptype = row["payment_type"]
+            if ptype == "not_defined":
+                continue
+            counts[ptype].add(row["order_id"])
+            try:
+                k = int(row["payment_installments"])
+                inst_sum[ptype] += k
+                inst_n[ptype] += 1
+            except ValueError:
+                pass
+    out = []
+    for p, ids in counts.items():
+        n = len(ids)
+        avg_inst = inst_sum[p] / inst_n[p] if inst_n[p] > 0 else 0.0
+        out.append((p, n, round(avg_inst, 2)))
+    out.sort(key=lambda x: -x[1])
+    return out
+
+
 # ============================================================================
 # Hidden helper: _data_calc — central data hub
 # ============================================================================
@@ -369,6 +416,86 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
     refs["cohort_start"] = s7 + 2
     refs["cohort_end"] = cohort_end
 
+    # ---- Section 8: Order status (aggregated from raw orders CSV) ----
+    s8 = cohort_end + 3
+    ws.cell(row=s8, column=1, value="Order Status (raw aggregation)").font = font(bold=True, size=14, color=NAVY)
+    header_row(ws, s8 + 1, ["Status", "Orders", "Share"], start_col=1)
+    status_rows = aggregate_order_status()
+    total_orders = sum(n for _, n in status_rows)
+    refs["status_start"] = s8 + 2
+    for i, (s_name, n) in enumerate(status_rows):
+        r = s8 + 2 + i
+        ws.cell(row=r, column=1, value=s_name)
+        c = ws.cell(row=r, column=2, value=n); c.number_format = "#,##0"
+        # Share computed via formula (visible function: simple division)
+        sc = ws.cell(row=r, column=3, value=f"=B{r}/SUM($B${s8+2}:$B${s8+1+len(status_rows)})")
+        sc.number_format = "0.0%"
+    refs["status_end"] = s8 + 1 + len(status_rows)
+    add_table(ws, f"A{s8+1}:C{refs['status_end']}", "tbl_status_raw")
+
+    # ---- Section 9: Payment mix (aggregated from raw payments CSV) ----
+    s9 = refs["status_end"] + 3
+    ws.cell(row=s9, column=1, value="Payment Mix (raw aggregation)").font = font(bold=True, size=14, color=NAVY)
+    header_row(ws, s9 + 1, ["Payment type", "Orders", "Share", "Avg installments"], start_col=1)
+    pay_rows = aggregate_payment_mix()
+    refs["payment_start"] = s9 + 2
+    for i, (p, n, avg) in enumerate(pay_rows):
+        r = s9 + 2 + i
+        ws.cell(row=r, column=1, value=p)
+        c = ws.cell(row=r, column=2, value=n); c.number_format = "#,##0"
+        sc = ws.cell(row=r, column=3, value=f"=B{r}/SUM($B${s9+2}:$B${s9+1+len(pay_rows)})")
+        sc.number_format = "0.0%"
+        ic = ws.cell(row=r, column=4, value=avg); ic.number_format = "0.0"
+    refs["payment_end"] = s9 + 1 + len(pay_rows)
+    add_table(ws, f"A{s9+1}:D{refs['payment_end']}", "tbl_payment_raw")
+
+    # ---- Section 10: Derived headlines (formula-computed, used by Cover) ----
+    s10 = refs["payment_end"] + 3
+    ws.cell(row=s10, column=1, value="Derived Headlines (formulas)").font = font(bold=True, size=14, color=NAVY)
+    header_row(ws, s10 + 1, ["Metric", "Formula result"], start_col=1)
+    # Look up specific values via VLOOKUP / INDEX / direct ref so the formulas are visible
+    rfm_atrisk_count_formula = (
+        f"=VLOOKUP(\"At Risk\",$A${refs['rfm_start']}:$G${refs['rfm_end']},2,FALSE)"
+    )
+    rfm_atrisk_arpu_formula = (
+        f"=VLOOKUP(\"At Risk\",$A${refs['rfm_start']}:$G${refs['rfm_end']},6,FALSE)"
+    )
+    inst_aov_710_formula = (
+        f"=VLOOKUP(\"7-10 installments\",$A${refs['inst_start']}:$E${refs['inst_end']},3,FALSE)"
+    )
+    inst_aov_1_formula = (
+        f"=VLOOKUP(\"1 (single)\",$A${refs['inst_start']}:$E${refs['inst_end']},3,FALSE)"
+    )
+
+    headline_metrics = [
+        ("At-Risk count (from RFM)", rfm_atrisk_count_formula, "#,##0"),
+        ("At-Risk ARPU (from RFM)", rfm_atrisk_arpu_formula, "0"),
+        ("7-10 inst AOV (from Installments)", inst_aov_710_formula, "0"),
+        ("1-inst AOV (from Installments)", inst_aov_1_formula, "0"),
+        # Derived: aggressive ROI revenue = at_risk × 20% × ARPU × 50%
+        ("Aggressive ROI revenue (R$)",
+         f"=B{s10+2}*0.2*B{s10+3}*0.5", "#,##0"),
+        # Derived: AOV ratio 7-10 / 1
+        ("AOV ratio (7-10 / 1)",
+         f"=B{s10+4}/B{s10+5}", "0.00"),
+        # Repeat rate (already in KPI lookup) — pull via XLOOKUP
+        ("Cross-month repeat rate",
+         f'=_xlfn.XLOOKUP("Cross-month repeat rate",$A$3:$A${refs["kpi_end"]},$B$3:$B${refs["kpi_end"]})',
+         "0.00%"),
+    ]
+    for i, (label, fml, fmt) in enumerate(headline_metrics):
+        r = s10 + 2 + i
+        ws.cell(row=r, column=1, value=label)
+        c = ws.cell(row=r, column=2, value=fml); c.number_format = fmt
+    refs["headline_start"] = s10 + 2
+    refs["headline_end"] = s10 + 1 + len(headline_metrics)
+    add_table(ws, f"A{s10+1}:B{refs['headline_end']}", "tbl_headlines")
+
+    # Specific cell pointers for Cover formulas
+    refs["cell_aggressive_roi"] = f"_data_calc!$B${s10+6}"
+    refs["cell_aov_ratio"] = f"_data_calc!$B${s10+7}"
+    refs["cell_repeat_rate"] = f"_data_calc!$B${s10+8}"
+
     return refs
 
 
@@ -413,28 +540,41 @@ def build_cover(wb: Workbook, refs: dict) -> None:
         ws.cell(row=5 + i, column=2, value=k).font = font(bold=True, color=NAVY)
         ws.cell(row=5 + i, column=3, value=v).font = font()
 
-    # Headline metrics
-    section_header(ws, 9, "THREE HEADLINE FINDINGS")
-    cards = [
-        ("R$ 469K", "Win-back revenue opportunity",
-         "21,975 at-risk customers · 9.4× ROI in aggressive scenario"),
-        ("1.81%", "Cross-month repeat rate",
-         "Platform-level retention failure (vs. 5–15% mature benchmark)"),
-        ("3.48×", "ARPU lift from 7-10 installments",
-         "R$ 334 vs R$ 96 single payment — Brazil's hidden CRM"),
+    # Headline metrics — formulas pulling from _data_calc Derived Headlines
+    section_header(ws, 9, "THREE HEADLINE FINDINGS (formula-driven)")
+    # Big-number cells use TEXT() to format the formula result inline as the
+    # display string the reviewer sees. Each big number is computed live.
+    big_formulas = [
+        f'="R$ "&TEXT({refs["cell_aggressive_roi"]}/1000,"0")&"K"',
+        f'=TEXT({refs["cell_repeat_rate"]},"0.00%")',
+        f'=TEXT({refs["cell_aov_ratio"]},"0.00")&"×"',
     ]
-    for i, (big, mid, small) in enumerate(cards):
+    mid_labels = [
+        "Win-back revenue opportunity",
+        "Cross-month repeat rate",
+        "ARPU lift from 7-10 installments",
+    ]
+    small_labels = [
+        "21,975 at-risk customers · 9.4× ROI aggressive scenario",
+        "Platform-level retention failure (vs. 5-15% mature benchmark)",
+        "R$ 334 vs R$ 96 single payment — Brazil's hidden CRM",
+    ]
+    for i in range(3):
         col = 2 + i
         ws.row_dimensions[11].height = 38
         ws.row_dimensions[12].height = 22
         ws.row_dimensions[13].height = 36
-        for r, val, sz in [(11, big, 24), (12, mid, 11)]:
-            c = ws.cell(row=r, column=col, value=val)
-            c.font = font(size=sz, bold=True, color=WHITE)
-            c.fill = fill([NAVY, TEAL, ORANGE][i])
-            c.alignment = center()
-            c.border = BORDER
-        c3 = ws.cell(row=13, column=col, value=small)
+        c = ws.cell(row=11, column=col, value=big_formulas[i])
+        c.font = font(size=24, bold=True, color=WHITE)
+        c.fill = fill([NAVY, TEAL, ORANGE][i])
+        c.alignment = center()
+        c.border = BORDER
+        c2 = ws.cell(row=12, column=col, value=mid_labels[i])
+        c2.font = font(size=11, bold=True, color=WHITE)
+        c2.fill = fill([NAVY, TEAL, ORANGE][i])
+        c2.alignment = center()
+        c2.border = BORDER
+        c3 = ws.cell(row=13, column=col, value=small_labels[i])
         c3.font = font(size=9)
         c3.fill = fill(LIGHT_GRAY)
         c3.alignment = center()
@@ -491,19 +631,18 @@ def build_toc(wb: Workbook) -> None:
 
     header_row(ws, 5, ["#", "Sheet", "What it shows"])
     entries = [
-        ("01", "01_Cover", "Headline metrics + live links to all artifacts"),
+        ("01", "01_Cover", "Headline cards (formula-driven) + live links"),
         ("02", "02_TOC", "This page"),
-        ("03", "03_Data_Dictionary", "9-table schema + 3-row sample of the 5 most-joined tables"),
-        ("04", "04_Executive_Summary", "60-second brief: question → method → 3 findings → recommendation"),
-        ("05", "05_KPI_Dashboard", "Scale, yearly KPIs, status mix, payment mix (formulas → _data_calc)"),
-        ("06", "06_Revenue_Trend", "Monthly revenue + line chart (Excel Table)"),
-        ("07", "07_RFM_Segments", "RFM with NTILE; Pareto + Champions/At-Risk priority (icon set)"),
-        ("08", "08_Cohort_Heatmap", "13-month retention matrix with color scale + frozen pane"),
-        ("09", "09_ROI_Calculator", "Live formulas — recall rate slider, scenarios, Named Range inputs"),
-        ("10", "10_Installments", "Brazil installment culture — AOV/repeat rate by bucket"),
-        ("11", "11_Logistics", "State-level ETA gap with 3-color conditional formatting"),
-        ("12", "12_Methodology", "Tech stack, core SQL, NTILE-vs-pandas, caveats, upgrade path"),
-        ("13", "13_Pivot_Analysis", "VLOOKUP / INDEX-MATCH / XLOOKUP side-by-side + SUMIFS pivot (state × payment)"),
+        ("03", "03_Data_Dictionary", "9-table schema + 3-row samples"),
+        ("04", "04_Brief", "Exec summary + core SQL (NTILE) + caveats + upgrade path"),
+        ("05", "05_KPI_Dashboard", "Scale / Yearly KPIs / Status / Payment — XLOOKUP from _data_calc"),
+        ("06", "06_Revenue_Trend", "Monthly revenue + line chart"),
+        ("07", "07_RFM_Segments", "RFM segments (NTILE) + Pareto chart + icon set"),
+        ("08", "08_Cohort_Heatmap", "13-month retention matrix with color scale"),
+        ("09", "09_ROI_Calculator", "Live formulas + Named Ranges (At_Risk_Count / ARPU / …)"),
+        ("10", "10_Installments", "AOV + repeat rate by installment bucket"),
+        ("11", "11_Logistics", "State ETA gap with 3-color scale"),
+        ("12", "12_Pivot_Analysis", "VLOOKUP / INDEX-MATCH / XLOOKUP demo + real PivotTable"),
     ]
     for i, (num, sheet, desc) in enumerate(entries):
         r = 6 + i
@@ -600,15 +739,16 @@ def build_data_dictionary(wb: Workbook) -> None:
 
 
 # ============================================================================
-# 04_Executive_Summary
+# 04_Brief — Executive Summary + Methodology, merged
 # ============================================================================
-def build_summary(wb: Workbook) -> None:
-    ws = wb.create_sheet("04_Executive_Summary")
+def build_brief(wb: Workbook) -> None:
+    ws = wb.create_sheet("04_Brief")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 18, "C": 60, "D": 2})
 
-    title_block(ws, 2, "Executive Summary", span=2)
+    title_block(ws, 2, "Brief & Methodology", span=2)
 
+    # ---- Executive summary blocks ----
     blocks = [
         ("Question",
          "Brazil's largest SMB marketplace (Olist, 12,000+ sellers) released 99K orders 2016–2018. "
@@ -617,24 +757,18 @@ def build_summary(wb: Workbook) -> None:
          "9-table SQLite schema · SQL Window Functions (NTILE) for RFM scoring · Cohort retention · "
          "Installment-bucket analysis · Quantified ROI scenarios."),
         ("Finding 1 — Pareto",
-         "Champions (16% of customers) + At-Risk (24%) drive 67% of revenue. Marketing spend should "
-         "consolidate here, not chase the long tail."),
+         "Champions (16% of customers) + At-Risk (24%) drive 67% of revenue."),
         ("Finding 2 — Retention crisis",
-         "Cross-month repeat rate is 1.81%. Cohort heatmap shows M1 at 0.2–0.7%. Olist is "
-         "acquisition-driven, not retention-driven — biggest leverage is win-back, not new acquisition."),
+         "Cross-month repeat rate is 1.81%. Olist is acquisition-driven, not retention-driven."),
         ("Finding 3 — Installments = hidden CRM",
-         "Customers paying in 7–10 installments have 3.48× ARPU and 65% higher repeat rate than "
-         "single-payment buyers. Installment plans are an under-leveraged retention mechanism."),
+         "7–10 installments customers: 3.48× ARPU, 65% higher repeat rate than single-payment."),
         ("Recommendation",
-         "Launch personalized win-back EDM to 21,975 At-Risk customers (cost ≈ R$ 50K). Conservative "
-         "5% recall = R$ 117K incremental revenue (2.3× ROI). Aggressive 20% = R$ 469K (9.4× ROI)."),
-        ("Decision artifact",
-         "PRD-style proposal in proposals/recall_campaign_prd.md — includes timeline, cross-team RACI, "
-         "A/B design, kill criteria. See sheet 09_ROI_Calculator for the live ROI calculator."),
+         "Personalized win-back EDM to 21,975 At-Risk customers (≈ R$ 50K). 5% recall = R$ 117K (2.3× ROI). "
+         "20% = R$ 469K (9.4× ROI)."),
     ]
     for i, (label, body) in enumerate(blocks):
         r = 5 + i
-        ws.row_dimensions[r].height = 56
+        ws.row_dimensions[r].height = 48
         cell_l = ws.cell(row=r, column=2, value=label)
         cell_l.font = font(bold=True, color=WHITE)
         cell_l.fill = fill(NAVY if i < 2 else (TEAL if i < 5 else ORANGE))
@@ -645,6 +779,57 @@ def build_summary(wb: Workbook) -> None:
         cell_b.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         cell_b.fill = fill(LIGHT_GRAY)
         cell_b.border = BORDER
+
+    # ---- Core SQL (NTILE window function) ----
+    sql_section_row = 5 + len(blocks) + 2
+    section_header(ws, sql_section_row, "Core SQL — RFM with NTILE window function")
+    sql = (
+        "WITH rfm_base AS (\n"
+        "    SELECT c.customer_unique_id,\n"
+        "           ROUND(JULIANDAY(MAX(snapshot)) - JULIANDAY(MAX(o.order_purchase_timestamp)),0) AS r_days,\n"
+        "           COUNT(DISTINCT o.order_id) AS f,\n"
+        "           ROUND(SUM(oi.price),2) AS m\n"
+        "    FROM orders o JOIN order_items oi USING(order_id)\n"
+        "                  JOIN customers c USING(customer_id)\n"
+        "    WHERE o.order_status='delivered' GROUP BY c.customer_unique_id\n"
+        ")\n"
+        "SELECT *,\n"
+        "    NTILE(5) OVER (ORDER BY r_days DESC) AS r,\n"
+        "    NTILE(5) OVER (ORDER BY f       ASC) AS f_score,\n"
+        "    NTILE(5) OVER (ORDER BY m       ASC) AS m_score\n"
+        "FROM rfm_base;"
+    )
+    sc = ws.cell(row=sql_section_row + 1, column=2, value=sql)
+    sc.font = Font(name="Consolas", size=9)
+    sc.alignment = Alignment(wrap_text=True, vertical="top")
+    sc.fill = fill(LIGHT_GRAY)
+    sc.border = BORDER
+    ws.row_dimensions[sql_section_row + 1].height = 220
+
+    # ---- Caveats ----
+    caveats_row = sql_section_row + 3
+    section_header(ws, caveats_row, "Caveats")
+    caveats = [
+        "F dimension near-zero variance — segmentation effectively R × M.",
+        "2018 data truncated at 2018-10 (post-Sep dip = cutoff, not decline).",
+        "Installments → AOV causality not established (needs A/B test).",
+    ]
+    for i, t in enumerate(caveats):
+        c = ws.cell(row=caveats_row + 1 + i, column=2, value=f"• {t}")
+        c.font = font(); c.alignment = left()
+
+    # ---- Upgrade path ----
+    upgrade_row = caveats_row + len(caveats) + 2
+    section_header(ws, upgrade_row, "Upgrade path (manual Excel UI)")
+    upgrade = [
+        "Power Query: Data → Get Data → From Folder → load each CSV as a Query.",
+        "Power Pivot: load Queries to Data Model. Build orders→customers, items→orders, payments→orders.",
+        "DAX: `Total Revenue := SUMX(items, items[price] + items[freight_value])`.",
+        "Dashboard: replace literals with `=CUBEVALUE(\"ThisWorkbookDataModel\", \"[Measures].[…]\")`.",
+    ]
+    for i, t in enumerate(upgrade):
+        c = ws.cell(row=upgrade_row + 1 + i, column=2, value=f"• {t}")
+        c.font = font(); c.alignment = left()
 
 
 # ============================================================================
@@ -702,47 +887,50 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
         ws.cell(row=r, column=5).number_format = "0.00"
         ws.cell(row=r, column=6).number_format = "0.00"
 
-    # ---- Order status (literals — small lookup table) ----
+    # ---- Order Status — pulled via XLOOKUP + SUMIFS from _data_calc ----
     st_row = yk_row + 2 + len(yearly) + 2
-    section_header(ws, st_row, "Order Status Distribution")
-    header_row(ws, st_row + 1, ["Status", "Orders", "Share %"])
-    status = [
-        ("delivered", 96478, 0.970),
-        ("shipped", 1107, 0.011),
-        ("canceled", 625, 0.006),
-        ("unavailable", 609, 0.006),
-        ("other", 622, 0.006),
-    ]
-    for i, (s, o, p) in enumerate(status):
+    section_header(ws, st_row, "Order Status Distribution (from raw)")
+    header_row(ws, st_row + 1, ["Status", "Orders", "Share"])
+    statuses_known = ["delivered", "shipped", "canceled", "unavailable", "other"]
+    status_a_range = f"_data_calc!$A${refs['status_start']}:$A${refs['status_end']}"
+    status_b_range = f"_data_calc!$B${refs['status_start']}:$B${refs['status_end']}"
+    status_c_range = f"_data_calc!$C${refs['status_start']}:$C${refs['status_end']}"
+    for i, s in enumerate(statuses_known):
         r = st_row + 2 + i
         ws.cell(row=r, column=2, value=s).border = BORDER
-        c = ws.cell(row=r, column=3, value=o)
+        # XLOOKUP the order count
+        c = ws.cell(row=r, column=3,
+                    value=f'=_xlfn.XLOOKUP("{s}",{status_a_range},{status_b_range},0)')
         c.number_format = "#,##0"; c.border = BORDER
-        c2 = ws.cell(row=r, column=4, value=p)
+        # XLOOKUP the share
+        c2 = ws.cell(row=r, column=4,
+                     value=f'=_xlfn.XLOOKUP("{s}",{status_a_range},{status_c_range},0)')
         c2.number_format = "0.0%"; c2.border = BORDER
-    st_end = st_row + 1 + len(status)
+    st_end = st_row + 1 + len(statuses_known)
     add_table(ws, f"B{st_row + 1}:D{st_end}", "tbl_status")
 
-    # ---- Payment mix ----
+    # ---- Payment Mix — pulled via XLOOKUP from _data_calc ----
     pm_row = st_end + 3
-    section_header(ws, pm_row, "Payment Mix (Brazil-specific)")
-    header_row(ws, pm_row + 1, ["Payment type", "Orders", "Share %", "Avg installments"])
-    payments = [
-        ("credit_card", 76795, 0.739, 3.5),
-        ("boleto", 19784, 0.190, 1.0),
-        ("voucher", 5775, 0.056, 1.0),
-        ("debit_card", 1529, 0.015, 1.0),
-    ]
-    for i, (p, o, share, inst) in enumerate(payments):
+    section_header(ws, pm_row, "Payment Mix (from raw)")
+    header_row(ws, pm_row + 1, ["Payment type", "Orders", "Share", "Avg installments"])
+    payments_known = ["credit_card", "boleto", "voucher", "debit_card"]
+    pay_a_range = f"_data_calc!$A${refs['payment_start']}:$A${refs['payment_end']}"
+    pay_b_range = f"_data_calc!$B${refs['payment_start']}:$B${refs['payment_end']}"
+    pay_c_range = f"_data_calc!$C${refs['payment_start']}:$C${refs['payment_end']}"
+    pay_d_range = f"_data_calc!$D${refs['payment_start']}:$D${refs['payment_end']}"
+    for i, p in enumerate(payments_known):
         r = pm_row + 2 + i
         ws.cell(row=r, column=2, value=p).border = BORDER
-        c = ws.cell(row=r, column=3, value=o)
+        c = ws.cell(row=r, column=3,
+                    value=f'=_xlfn.XLOOKUP("{p}",{pay_a_range},{pay_b_range},0)')
         c.number_format = "#,##0"; c.border = BORDER
-        c2 = ws.cell(row=r, column=4, value=share)
+        c2 = ws.cell(row=r, column=4,
+                     value=f'=_xlfn.XLOOKUP("{p}",{pay_a_range},{pay_c_range},0)')
         c2.number_format = "0.0%"; c2.border = BORDER
-        c3 = ws.cell(row=r, column=5, value=inst)
+        c3 = ws.cell(row=r, column=5,
+                     value=f'=_xlfn.XLOOKUP("{p}",{pay_a_range},{pay_d_range},0)')
         c3.number_format = "0.0"; c3.border = BORDER
-    pm_end = pm_row + 1 + len(payments)
+    pm_end = pm_row + 1 + len(payments_known)
     add_table(ws, f"B{pm_row + 1}:E{pm_end}", "tbl_payment")
 
     ws.freeze_panes = "B5"
@@ -1194,122 +1382,10 @@ def build_logistics(wb: Workbook, refs: dict) -> None:
 
 
 # ============================================================================
-# 12_Methodology
-# ============================================================================
-def build_methodology(wb: Workbook) -> None:
-    ws = wb.create_sheet("12_Methodology")
-    ws.sheet_view.showGridLines = False
-    set_col_widths(ws, {"A": 2, "B": 24, "C": 60, "D": 30, "E": 2})
-
-    title_block(ws, 2, "Methodology & Tech Stack", span=3)
-
-    section_header(ws, 4, "Tech stack & why")
-    stack = [
-        ("Python 3.12", "Glue language for ETL + analysis"),
-        ("SQLite + SQL", "9-table schema; SQL Window Functions for RFM (NTILE)"),
-        ("pandas", "Cohort matrix + installment bucketing"),
-        ("matplotlib", "Static portfolio charts (cohort, installments)"),
-        ("Streamlit", "Interactive 5-page dashboard with ROI calculator"),
-        ("Tableau Public", "Stakeholder-facing dashboard"),
-        ("openpyxl", "This Excel portfolio (Tables, formulas, conditional formatting)"),
-    ]
-    header_row(ws, 5, ["Tool", "Role"])
-    for i, (k, v) in enumerate(stack):
-        r = 6 + i
-        ws.cell(row=r, column=2, value=k).font = font(bold=True)
-        ws.cell(row=r, column=2).border = BORDER
-        ws.cell(row=r, column=3, value=v).alignment = left()
-        ws.cell(row=r, column=3).border = BORDER
-    add_table(ws, f"B5:C{5 + len(stack)}", "tbl_stack")
-
-    section_header(ws, 14, "Core SQL — RFM with NTILE Window Function")
-    sql = (
-        "WITH snapshot AS (\n"
-        "    SELECT MAX(order_purchase_timestamp) AS snapshot_date\n"
-        "    FROM orders WHERE order_status = 'delivered'\n"
-        "),\n"
-        "rfm_base AS (\n"
-        "    SELECT c.customer_unique_id,\n"
-        "           ROUND(JULIANDAY((SELECT snapshot_date FROM snapshot))\n"
-        "                 - JULIANDAY(MAX(o.order_purchase_timestamp)), 0) AS recency_days,\n"
-        "           COUNT(DISTINCT o.order_id) AS frequency,\n"
-        "           ROUND(SUM(oi.price), 2)    AS monetary\n"
-        "    FROM orders o\n"
-        "    JOIN order_items oi ON o.order_id = oi.order_id\n"
-        "    JOIN customers   c  ON o.customer_id = c.customer_id\n"
-        "    WHERE o.order_status = 'delivered'\n"
-        "    GROUP BY c.customer_unique_id\n"
-        "),\n"
-        "rfm_scored AS (\n"
-        "    SELECT *,\n"
-        "        NTILE(5) OVER (ORDER BY recency_days DESC) AS r_score,\n"
-        "        NTILE(5) OVER (ORDER BY frequency    ASC ) AS f_score,\n"
-        "        NTILE(5) OVER (ORDER BY monetary     ASC ) AS m_score\n"
-        "    FROM rfm_base\n"
-        ")\n"
-        "SELECT CASE\n"
-        "    WHEN r_score>=4 AND f_score>=4 AND m_score>=4 THEN 'Champions'\n"
-        "    WHEN r_score>=4 AND f_score>=3                THEN 'Loyal'\n"
-        "    WHEN r_score>=4                               THEN 'Potential New'\n"
-        "    WHEN r_score<=2 AND f_score>=3                THEN 'At Risk'\n"
-        "    WHEN r_score<=2                               THEN 'Lost'\n"
-        "    ELSE                                                'Average'\n"
-        "END AS segment, COUNT(*) AS customers, ROUND(AVG(monetary),2) AS arpu,\n"
-        "  ROUND(SUM(monetary),2) AS revenue\n"
-        "FROM rfm_scored GROUP BY segment ORDER BY revenue DESC;"
-    )
-    sc = ws.cell(row=15, column=2, value=sql)
-    sc.font = Font(name="Consolas", size=9)
-    sc.alignment = Alignment(wrap_text=True, vertical="top")
-    sc.fill = fill(LIGHT_GRAY)
-    sc.border = BORDER
-    ws.row_dimensions[15].height = 380
-
-    section_header(ws, 17, "Why NTILE (SQL) over pandas qcut")
-    table = [
-        ("Portability", "Snowflake / BigQuery / Redshift / SQLite all run identical SQL", "Python only"),
-        ("Scale", "Runs in DB — handles tens of millions of rows", "Pulls all rows into Python memory"),
-        ("Orchestration", "Slots into dbt / Airflow", "Needs custom wrapper"),
-        ("Hiring signal", "'Knows the warehouse' = senior signal", "'Knows pandas' = junior signal"),
-    ]
-    header_row(ws, 18, ["Dimension", "NTILE (SQL)", "pandas qcut"])
-    for i, (dim, a, b) in enumerate(table):
-        r = 19 + i
-        ws.cell(row=r, column=2, value=dim).font = font(bold=True)
-        ws.cell(row=r, column=2).border = BORDER
-        ws.cell(row=r, column=3, value=a).alignment = left()
-        ws.cell(row=r, column=3).border = BORDER
-        ws.cell(row=r, column=4, value=b).alignment = left()
-        ws.cell(row=r, column=4).border = BORDER
-    add_table(ws, f"B18:D{18 + len(table)}", "tbl_compare_ntile")
-
-    section_header(ws, 24, "Caveats")
-    caveats = [
-        "F dimension near-zero variance — segmentation effectively R × M.",
-        "2018 data truncated at 2018-10 (post-Sep dip = cutoff, not decline).",
-        "Installments → AOV causality not established (needs A/B test).",
-    ]
-    for i, t in enumerate(caveats):
-        c = ws.cell(row=25 + i, column=2, value=f"• {t}")
-        c.font = font(); c.alignment = left()
-
-    section_header(ws, 30, "Upgrade path (manual)")
-    upgrade = [
-        "Power Query: Data → Get Data → From Folder → /data. Each CSV becomes a Query.",
-        "Power Pivot: load Queries to Data Model. Build orders→customers, items→orders, payments→orders.",
-        "DAX measure: `Total Revenue := SUMX(items, items[price] + items[freight_value])`.",
-        "Dashboard: replace literals with `=CUBEVALUE(\"ThisWorkbookDataModel\", \"[Measures].[…]\")`.",
-    ]
-    for i, t in enumerate(upgrade):
-        c = ws.cell(row=31 + i, column=2, value=f"• {t}")
-        c.font = font(); c.alignment = left()
-
-
-# ============================================================================
-# 13_Pivot_Analysis — VLOOKUP demo + SUMIFS PivotTable equivalent
+# 12_Pivot_Analysis — Lookup demo + real PivotTable (built post-save via win32com)
 # ============================================================================
 def build_pivot_analysis(wb: Workbook) -> None:
-    ws = wb.create_sheet("13_Pivot_Analysis")
+    ws = wb.create_sheet("12_Pivot_Analysis")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {
         "A": 2, "B": 26, "C": 22, "D": 22, "E": 22, "F": 14, "G": 14, "H": 14,
@@ -1386,13 +1462,14 @@ def build_pivot_analysis(wb: Workbook) -> None:
     # =============================================================
     # SECTION B — PivotTable equivalent: State × Payment Type
     # =============================================================
-    section_header(ws, 24, "B. SUMIFS pivot — orders by State × Payment Type")
+    section_header(ws, 24, "B. Real PivotTable — orders by State × Payment Type")
+    ws.cell(row=25, column=2,
+            value="Source: tbl_payments_long (right). PivotTable inserted at B27 by post-build script. "
+                  "Fields: State (rows), Payment type (columns), Orders (sum).").font = font(italic=True, size=9, color=DARK_GRAY)
 
-    # Compute aggregation
+    # Long-form source table (right) — used as the PivotTable cache source
     states, ptypes, pivot_data = aggregate_state_payment()
-
-    # ---- Long-form source table (right side, columns J:L) ----
-    ws.cell(row=24, column=10, value="Long-form source").font = font(bold=True, color=NAVY)
+    ws.cell(row=24, column=10, value="Source: tbl_payments_long").font = font(bold=True, color=NAVY)
     header_row(ws, 27, ["State", "Payment type", "Orders"], start_col=10)
     long_rows: list[tuple[str, str, int]] = []
     for s in states:
@@ -1408,78 +1485,56 @@ def build_pivot_analysis(wb: Workbook) -> None:
     long_end = 27 + len(long_rows)
     add_table(ws, f"J27:L{long_end}", "tbl_payments_long")
 
-    # ---- Pivot output (left side) ----
-    pivot_header_row = 27
-    pivot_first_data_row = 28
-    pivot_cols = ["State"] + ptypes + ["Total"]
-    header_row(ws, pivot_header_row, pivot_cols)
-
-    # Source ranges for SUMIFS (use absolute refs into the long-form table)
-    state_col_ref = f"$J$28:$J${long_end}"
-    ptype_col_ref = f"$K$28:$K${long_end}"
-    orders_col_ref = f"$L$28:$L${long_end}"
-
-    for i, s in enumerate(states):
-        r = pivot_first_data_row + i
-        ws.cell(row=r, column=2, value=s).font = font(bold=True)
-        ws.cell(row=r, column=2).border = BORDER
-        for ci, p in enumerate(ptypes):
-            col_idx = 3 + ci  # C, D, E, F
-            # SUMIFS: sum orders where state matches and payment_type matches
-            cell = ws.cell(row=r, column=col_idx,
-                           value=f'=SUMIFS({orders_col_ref},{state_col_ref},$B{r},{ptype_col_ref},{get_column_letter(col_idx)}${pivot_header_row})')
-            cell.number_format = "#,##0"
-            cell.alignment = right()
-            cell.border = BORDER
-        # Row total
-        total_col_idx = 3 + len(ptypes)
-        first_payment_letter = "C"
-        last_payment_letter = get_column_letter(2 + len(ptypes))
-        total_cell = ws.cell(row=r, column=total_col_idx,
-                             value=f"=SUM({first_payment_letter}{r}:{last_payment_letter}{r})")
-        total_cell.number_format = "#,##0"
-        total_cell.font = font(bold=True)
-        total_cell.alignment = right()
-        total_cell.border = BORDER
-        total_cell.fill = fill(LIGHT_GRAY)
-
-    # Column total row
-    pivot_data_end = pivot_first_data_row + len(states) - 1
-    total_row = pivot_data_end + 1
-    ws.cell(row=total_row, column=2, value="Total").font = font(bold=True, color=WHITE)
-    ws.cell(row=total_row, column=2).fill = fill(NAVY)
-    ws.cell(row=total_row, column=2).border = BORDER
-    for ci, _ in enumerate(ptypes):
-        col_idx = 3 + ci
-        cl = get_column_letter(col_idx)
-        cell = ws.cell(row=total_row, column=col_idx,
-                       value=f"=SUM({cl}{pivot_first_data_row}:{cl}{pivot_data_end})")
-        cell.number_format = "#,##0"
-        cell.font = font(bold=True, color=WHITE)
-        cell.fill = fill(NAVY)
-        cell.alignment = right()
-        cell.border = BORDER
-    grand_col = get_column_letter(3 + len(ptypes))
-    gc = ws.cell(row=total_row, column=3 + len(ptypes),
-                 value=f"=SUM(C{pivot_first_data_row}:{get_column_letter(2+len(ptypes))}{pivot_data_end})")
-    gc.number_format = "#,##0"
-    gc.font = font(bold=True, color=WHITE)
-    gc.fill = fill(ORANGE)
-    gc.alignment = right()
-    gc.border = BORDER
-
-    # Conditional formatting on the pivot body — color scale highlights hotspots
-    body_range = f"C{pivot_first_data_row}:{get_column_letter(2+len(ptypes))}{pivot_data_end}"
-    ws.conditional_formatting.add(
-        body_range,
-        ColorScaleRule(
-            start_type="min", start_color="FFFFFF",
-            mid_type="percentile", mid_value=50, mid_color=ACCENT_YELLOW,
-            end_type="max", end_color=ORANGE,
-        ),
-    )
-
     ws.freeze_panes = "B6"
+
+
+# ============================================================================
+# Post-processor: add a real PivotTable via Excel COM (win32com)
+# ============================================================================
+def add_real_pivottable(file_path: Path) -> None:
+    """Open the saved xlsx in Excel, build a PivotTable on 12_Pivot_Analysis
+    using the tbl_payments_long source, save and quit. Windows + Excel only."""
+    import win32com.client as w  # local import: only needed at build time
+
+    xlRowField, xlColumnField, xlDataField = 1, 2, 4
+    xlSum = -4157
+    xlDatabase = 1
+
+    excel = w.Dispatch("Excel.Application")
+    excel.Visible = False
+    excel.DisplayAlerts = False
+    try:
+        wb = excel.Workbooks.Open(str(file_path.resolve()))
+        ws = wb.Sheets("12_Pivot_Analysis")
+
+        # Source = the structured table tbl_payments_long
+        cache = wb.PivotCaches().Create(SourceType=xlDatabase, SourceData="tbl_payments_long")
+        # Destination cell — a fresh anchor at B27 (left column area)
+        dest = ws.Range("B27")
+        pt = cache.CreatePivotTable(TableDestination=dest, TableName="pt_state_payment")
+
+        pt.PivotFields("State").Orientation = xlRowField
+        pt.PivotFields("Payment type").Orientation = xlColumnField
+        data_field = pt.PivotFields("Orders")
+        data_field.Orientation = xlDataField
+        # Rename + sum
+        try:
+            pt.PivotFields("Sum of Orders").Function = xlSum
+            pt.PivotFields("Sum of Orders").NumberFormat = "#,##0"
+        except Exception:
+            pass
+
+        # Optional: style
+        try:
+            pt.TableStyle2 = "PivotStyleMedium9"
+        except Exception:
+            pass
+
+        wb.Save()
+        wb.Close(SaveChanges=False)
+    finally:
+        excel.Quit()
+        del excel
 
 
 # ============================================================================
@@ -1497,7 +1552,7 @@ def main() -> None:
     build_cover(wb, refs)
     build_toc(wb)
     build_data_dictionary(wb)
-    build_summary(wb)
+    build_brief(wb)
     build_kpis(wb, refs)
     build_revenue(wb, refs)
     build_rfm(wb, refs)
@@ -1505,22 +1560,26 @@ def main() -> None:
     build_roi(wb)
     build_installments(wb, refs)
     build_logistics(wb, refs)
-    build_methodology(wb)
     build_pivot_analysis(wb)
 
-    # Reorder: put _data_calc at the end (visually last though hidden);
-    # set 01_Cover as the active sheet on open
     sheet_order = [
-        "01_Cover", "02_TOC", "03_Data_Dictionary", "04_Executive_Summary",
+        "01_Cover", "02_TOC", "03_Data_Dictionary", "04_Brief",
         "05_KPI_Dashboard", "06_Revenue_Trend", "07_RFM_Segments", "08_Cohort_Heatmap",
-        "09_ROI_Calculator", "10_Installments", "11_Logistics", "12_Methodology",
-        "13_Pivot_Analysis",
+        "09_ROI_Calculator", "10_Installments", "11_Logistics", "12_Pivot_Analysis",
         "_data_calc",
     ]
     wb._sheets = [wb[name] for name in sheet_order]
     wb.active = 0
     wb.save(XLSX_PATH)
-    print(f"Wrote {XLSX_PATH} ({XLSX_PATH.stat().st_size / 1024:.1f} KB)")
+    print(f"Wrote base xlsx: {XLSX_PATH} ({XLSX_PATH.stat().st_size / 1024:.1f} KB)")
+
+    # Post-process: open in Excel via COM and add real PivotTable
+    try:
+        add_real_pivottable(XLSX_PATH)
+        print(f"Added real PivotTable. Final size: {XLSX_PATH.stat().st_size / 1024:.1f} KB")
+    except Exception as e:
+        print(f"WARN: PivotTable post-build failed ({type(e).__name__}: {e})."
+              f" Base xlsx is still valid; you can add the pivot manually.")
 
 
 if __name__ == "__main__":
