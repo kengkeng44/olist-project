@@ -373,10 +373,11 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
 
 
 def kpi_lookup_formula(refs: dict, metric_name: str) -> str:
-    """XLOOKUP formula fetching a KPI value from _data_calc by metric name."""
+    """XLOOKUP formula fetching a KPI value from _data_calc by metric name.
+    Uses the `_xlfn.` prefix that openpyxl requires for modern Excel functions."""
     range_metric = f"_data_calc!$A$3:$A${refs['kpi_end']}"
     range_value = f"_data_calc!$B$3:$B${refs['kpi_end']}"
-    return f'=XLOOKUP("{metric_name}",{range_metric},{range_value})'
+    return f'=_xlfn.XLOOKUP("{metric_name}",{range_metric},{range_value})'
 
 
 # ============================================================================
@@ -494,7 +495,7 @@ def build_toc(wb: Workbook) -> None:
     entries = [
         ("01", "01_Cover", "Headline metrics + live links to all artifacts"),
         ("02", "02_TOC", "This page"),
-        ("03", "03_Data_Dictionary", "9-table schema + 10-row sample of each raw table"),
+        ("03", "03_Data_Dictionary", "9-table schema + 3-row sample of the 5 most-joined tables"),
         ("04", "04_Executive_Summary", "60-second brief: question → method → 3 findings → recommendation"),
         ("05", "05_KPI_Dashboard", "Scale, yearly KPIs, status mix, payment mix (formulas → _data_calc)"),
         ("06", "06_Revenue_Trend", "Monthly revenue + line chart (Excel Table)"),
@@ -504,7 +505,7 @@ def build_toc(wb: Workbook) -> None:
         ("10", "10_Installments", "Brazil installment culture — AOV/repeat rate by bucket"),
         ("11", "11_Logistics", "State-level ETA gap with 3-color conditional formatting"),
         ("12", "12_Methodology", "Tech stack, core SQL, NTILE-vs-pandas, caveats, upgrade path"),
-        ("13", "13_Pivot_Analysis", "VLOOKUP/XLOOKUP demo + SUMIFS PivotTable equivalent (state × payment)"),
+        ("13", "13_Pivot_Analysis", "VLOOKUP / INDEX-MATCH / XLOOKUP side-by-side + SUMIFS pivot (state × payment)"),
     ]
     for i, (num, sheet, desc) in enumerate(entries):
         r = 6 + i
@@ -526,35 +527,34 @@ def build_toc(wb: Workbook) -> None:
 def build_data_dictionary(wb: Workbook) -> None:
     ws = wb.create_sheet("03_Data_Dictionary")
     ws.sheet_view.showGridLines = False
-    set_col_widths(ws, {"A": 2, "B": 26, "C": 18, "D": 60, "E": 2})
+    set_col_widths(ws, {"A": 2, "B": 26, "C": 14, "D": 44, "E": 2})
 
     title_block(ws, 2, "Data Dictionary",
-                "9 raw tables · 1.55M rows · 2016-09 → 2018-10. "
-                "Sample = first 10 rows; full data is on GitHub repo.",
+                "9 raw tables · 1.55M rows. 3-row sample below; full data on GitHub.",
                 span=4)
 
-    # Schema overview table
-    section_header(ws, 5, "Schema overview — 9 source tables")
-    header_row(ws, 6, ["Table", "Rows", "Description"])
+    # Schema overview — one-line descriptions only
+    section_header(ws, 5, "9 source tables")
+    header_row(ws, 6, ["Table", "Rows", "What's in it"])
     schema = [
         ("olist_orders_dataset", "olist_orders_dataset.csv",
-         "Order header — 8 timestamp columns from purchase to delivery; status."),
+         "Order header + 8 timestamps (purchase → delivery)."),
         ("olist_customers_dataset", "olist_customers_dataset.csv",
-         "Customer identity (customer_id per order, customer_unique_id stable across orders) + ZIP."),
+         "customer_id (per order) + customer_unique_id + ZIP."),
         ("olist_order_items_dataset", "olist_order_items_dataset.csv",
-         "Line items — 1 row per (order, product, seller). Has price + freight."),
+         "Line items: 1 row per (order, product, seller) with price + freight."),
         ("olist_order_payments_dataset", "olist_order_payments_dataset.csv",
-         "Payment lines — boleto / credit_card / voucher / debit_card; installments count."),
+         "Payment type (boleto / credit_card / voucher / debit_card) + installments."),
         ("olist_order_reviews_dataset", "olist_order_reviews_dataset.csv",
-         "1–5 star reviews + freeform comment. Joins to orders 1:1 (mostly)."),
+         "1-5 star reviews + comment text."),
         ("olist_products_dataset", "olist_products_dataset.csv",
-         "Product attributes (category, weight, dimensions, photo count)."),
+         "Product attributes (category, weight, dimensions)."),
         ("olist_sellers_dataset", "olist_sellers_dataset.csv",
-         "Seller location (3,095 sellers; ZIP + state)."),
+         "Seller ZIP + state."),
         ("olist_geolocation_dataset", "olist_geolocation_dataset.csv",
-         "ZIP-level lat/lng for Brazil. ~1M rows. Used for state-level aggregations only."),
+         "ZIP-level lat/lng (state-level aggregations only)."),
         ("product_category_name_translation", "product_category_name_translation.csv",
-         "PT→EN mapping for the 71 categories."),
+         "PT->EN mapping for the 71 product categories."),
     ]
     for i, (name, fname, desc) in enumerate(schema):
         r = 7 + i
@@ -567,7 +567,7 @@ def build_data_dictionary(wb: Workbook) -> None:
     schema_end = 6 + len(schema)
     add_table(ws, f"B6:D{schema_end}", "tbl_schema")
 
-    # Per-table sample blocks
+    # Sample blocks — 3 rows each, the 5 most-joined tables
     sample_files = [
         ("orders", "olist_orders_dataset.csv"),
         ("customers", "olist_customers_dataset.csv"),
@@ -577,10 +577,9 @@ def build_data_dictionary(wb: Workbook) -> None:
     ]
     cur_row = schema_end + 3
     for short, filename in sample_files:
-        section_header(ws, cur_row, f"Sample: {filename} (first 10 rows)")
+        section_header(ws, cur_row, f"{filename} — first 3 rows")
         cur_row += 1
-        headers, rows = read_raw_sample(filename, n=10)
-        # widen columns to header text fit
+        headers, rows = read_raw_sample(filename, n=3)
         for i, _ in enumerate(headers):
             col = 2 + i
             ws.column_dimensions[get_column_letter(col)].width = max(
@@ -596,9 +595,8 @@ def build_data_dictionary(wb: Workbook) -> None:
                 cell.alignment = left()
         sample_end = cur_row + len(rows)
         last_col = get_column_letter(1 + len(headers))
-        # Bound table within actual data range
         add_table(ws, f"B{cur_row}:{last_col}{sample_end}", f"tbl_sample_{short}")
-        cur_row = sample_end + 3
+        cur_row = sample_end + 2
 
     ws.freeze_panes = "B7"
 
@@ -1449,28 +1447,27 @@ def build_pivot_analysis(wb: Workbook) -> None:
     ws = wb.create_sheet("13_Pivot_Analysis")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {
-        "A": 2, "B": 26, "C": 22, "D": 22, "E": 14, "F": 14, "G": 14, "H": 14,
+        "A": 2, "B": 26, "C": 22, "D": 22, "E": 22, "F": 14, "G": 14, "H": 14,
         "I": 4, "J": 14, "K": 14, "L": 12, "M": 4, "N": 26, "O": 26, "P": 2,
     })
 
     title_block(ws, 2,
-                "Pivot Analysis & Lookup Demos",
-                "Three Excel-staple techniques: VLOOKUP, XLOOKUP (row 7-17), "
-                "and a SUMIFS-driven PivotTable equivalent (row 25+).",
+                "Lookup & Pivot Demo",
+                "Three ways to do the same lookup (row 8-12) + a SUMIFS pivot (row 25+).",
                 span=14)
 
     # =============================================================
-    # SECTION A — VLOOKUP / XLOOKUP demo (Category PT → EN)
+    # SECTION A — Lookup demo: 5 rows, 3 methods side-by-side
     # =============================================================
-    section_header(ws, 5, "Section A — VLOOKUP & XLOOKUP: Category translation (PT → EN)")
+    section_header(ws, 5, "A. Lookup demo — translate PT category → EN, three ways")
     ws.cell(row=6, column=2,
-            value="Same lookup, two functions. VLOOKUP needs leftmost col + col index; "
-                  "XLOOKUP works either direction and returns array.").font = font(italic=True, size=10, color=DARK_GRAY)
+            value="Goal: given a Portuguese category name, return its English label. "
+                  "Three formulas below produce the same answer.").font = font(italic=True, size=10, color=DARK_GRAY)
 
-    # --- Source: full 71-row translation table (right side) ---
+    # Source table (right side) — keep all 71 rows so the lookup has real data
     translation = read_category_translation()
-    ws.cell(row=5, column=14, value="Lookup source (all 71 categories)").font = font(bold=True, color=NAVY)
-    header_row(ws, 6, ["product_category_name (PT)", "category_name_english (EN)"], start_col=14)
+    ws.cell(row=5, column=14, value="Source: tbl_category_translation").font = font(bold=True, color=NAVY)
+    header_row(ws, 6, ["PT name", "EN name"], start_col=14)
     for i, (pt, en) in enumerate(translation):
         r = 7 + i
         ws.cell(row=r, column=14, value=pt).font = Font(name="Consolas", size=10)
@@ -1480,28 +1477,52 @@ def build_pivot_analysis(wb: Workbook) -> None:
     trans_end = 6 + len(translation)
     add_table(ws, f"N6:O{trans_end}", "tbl_category_translation")
 
-    # --- Demo: pick 10 PT categories, look up via VLOOKUP and XLOOKUP ---
-    sample_pt = [pt for pt, _ in translation[:10]]
-    header_row(ws, 7, ["Sample PT category", "EN via VLOOKUP", "EN via XLOOKUP"])
+    # Demo: 5 PT categories × 3 lookup methods
+    sample_pt = [pt for pt, _ in translation[:5]]
+    header_row(ws, 7, ["PT input", "VLOOKUP result", "INDEX/MATCH result", "XLOOKUP result"])
     for i, pt in enumerate(sample_pt):
         r = 8 + i
         c1 = ws.cell(row=r, column=2, value=pt)
         c1.font = Font(name="Consolas", size=10); c1.border = BORDER
-        # VLOOKUP — uses absolute range refs (classic syntax)
+        # VLOOKUP — classic, leftmost-only
         c2 = ws.cell(row=r, column=3,
                      value=f'=VLOOKUP(B{r},$N$7:$O${trans_end},2,FALSE)')
         c2.font = Font(name="Consolas", size=10); c2.border = BORDER
-        # XLOOKUP — uses two arrays, modern syntax
+        # INDEX/MATCH — universal, works on every Excel version since 1997
         c3 = ws.cell(row=r, column=4,
-                     value=f'=XLOOKUP(B{r},$N$7:$N${trans_end},$O$7:$O${trans_end},"not found")')
+                     value=f'=INDEX($O$7:$O${trans_end},MATCH(B{r},$N$7:$N${trans_end},0))')
         c3.font = Font(name="Consolas", size=10); c3.border = BORDER
+        # XLOOKUP — modern (Excel 2021+/365). _xlfn. prefix needed when
+        # written by openpyxl so Excel recognizes the function.
+        c4 = ws.cell(row=r, column=5,
+                     value=f'=_xlfn.XLOOKUP(B{r},$N$7:$N${trans_end},$O$7:$O${trans_end},"not found")')
+        c4.font = Font(name="Consolas", size=10); c4.border = BORDER
 
-    ws.cell(row=19, column=2,
-            value="VLOOKUP syntax:  =VLOOKUP(lookup_value, table_array, col_index_num, FALSE)").font = Font(name="Consolas", size=9, italic=True, color=DARK_GRAY)
-    ws.cell(row=20, column=2,
-            value="XLOOKUP syntax:  =XLOOKUP(lookup_value, lookup_array, return_array, [if_not_found])").font = Font(name="Consolas", size=9, italic=True, color=DARK_GRAY)
-    ws.cell(row=21, column=2,
-            value="XLOOKUP wins:  bidirectional, no column-index drift on insert, native default for missing.").font = font(italic=True, size=10, color=DARK_GRAY)
+    # Compact comparison table directly under the demo
+    section_header(ws, 14, "When to use which")
+    header_row(ws, 15, ["Function", "Excel version", "When to use", "Trade-off"])
+    methods = [
+        ("VLOOKUP", "Any (since 2007)",
+         "Quick lookup when key is in the leftmost column of the source table",
+         "Breaks if columns get reordered (col_index is positional)"),
+        ("INDEX/MATCH", "Any (since 1997)",
+         "Universal fallback; key column can be anywhere in the source",
+         "Slightly more verbose"),
+        ("XLOOKUP", "Excel 2021 / 365 only",
+         "Modern default — readable, supports if_not_found, bidirectional",
+         "Falls back to #NAME? on older Excel"),
+    ]
+    for i, (fn, ver, when, trade) in enumerate(methods):
+        r = 16 + i
+        ws.cell(row=r, column=2, value=fn).font = Font(name="Consolas", size=10, bold=True)
+        ws.cell(row=r, column=3, value=ver).font = font(size=10)
+        ws.cell(row=r, column=4, value=when).font = font(size=10)
+        ws.cell(row=r, column=4).alignment = left()
+        ws.cell(row=r, column=5, value=trade).font = font(size=10)
+        ws.cell(row=r, column=5).alignment = left()
+        for col in (2, 3, 4, 5):
+            ws.cell(row=r, column=col).border = BORDER
+    add_table(ws, f"B15:E{15 + len(methods)}", "tbl_lookup_methods")
 
     # =============================================================
     # SECTION B — PivotTable equivalent: State × Payment Type
