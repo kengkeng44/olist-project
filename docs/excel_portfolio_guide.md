@@ -198,6 +198,36 @@ lines 真實聚合 → 存進 `_data_calc` → XLOOKUP 拉。
 
 ---
 
+## 已內建一個 Power Query live connection(POC)
+
+`qry_orders_live` 已透過 win32com 寫進 xlsx,M code:
+
+```
+let
+    Source = Csv.Document(Web.Contents(
+        "https://raw.githubusercontent.com/kengkeng44/olist-project/master/data/olist_orders_dataset.csv"
+    ), [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars=true])
+in
+    Headers
+```
+
+**Reviewer 怎麼用**:
+1. 開 xlsx → Data 索引標籤 → **Queries & Connections** 窗格
+2. 看到 `qry_orders_live` 是 connection-only 查詢
+3. 右鍵 → **Load To...** → Table → 選 sheet → OK
+4. Excel 會 HTTP GET https://raw.githubusercontent.com/.../olist_orders_dataset.csv,99K rows 直接落表
+5. 之後改了 GitHub 上的 source CSV → 點 **Refresh All** → 重抓
+
+**為什麼不在 build 時自動 Load 到 sheet**:Excel 隱私 / Trust Center 對 Web 連接器需要使用者首次同意,COM 自動化無法越過此 prompt(`E_INVALIDARG`)。POC 採「query 已註冊,reviewer 一鍵載入」的折衷。
+
+**已知限制**:
+- GitHub raw 對匿名請求 60 次/小時 rate limit,大量 reviewer 同時用會踩到 429
+- `order_items.csv` 110 MB 接近 raw.githubusercontent.com timeout 邊界
+- 正式 portfolio 應遷移到 OneDrive / SharePoint 共用連結(Microsoft 官方推薦)
+
+---
+
 ## 升級到 Power Query / Power Pivot(senior signal)
 
 openpyxl 能寫 Tables / Formulas / Conditional Formatting / Named Ranges,

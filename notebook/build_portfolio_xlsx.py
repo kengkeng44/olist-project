@@ -623,6 +623,19 @@ def build_cover(wb: Workbook, refs: dict) -> None:
         ws.cell(row=15, column=col).fill = fill(ORANGE)
         ws.cell(row=15, column=col).alignment = center_across()
 
+    # ---- Live data callout banner — Power Query from GitHub raw ----
+    live_text = ("→  LIVE QUERY:  Data → Queries & Connections → "
+                 "right-click 'qry_orders_live' → Load To...  "
+                 "(M code fetches 99K orders fresh from GitHub raw)")
+    ws.row_dimensions[14].height = 22
+    lb = ws.cell(row=14, column=2, value=live_text)
+    lb.font = font(bold=True, color=WHITE, size=11)
+    lb.fill = fill(TEAL)
+    lb.alignment = center_across()
+    for col in range(3, 6):
+        ws.cell(row=14, column=col).fill = fill(TEAL)
+        ws.cell(row=14, column=col).alignment = center_across()
+
     # ---- TOC (merged from old 02_TOC) ----
     section_header(ws, 17, "SHEETS IN THIS WORKBOOK")
     header_row(ws, 18, ["#", "Sheet", "What it shows"])
@@ -1377,6 +1390,115 @@ def build_pivot_analysis(wb: Workbook) -> None:
 
 
 # ============================================================================
+# Post-processor: add a Power Query live connection to GitHub raw CSV
+# ============================================================================
+ORDERS_RAW_URL = (
+    "https://raw.githubusercontent.com/kengkeng44/olist-project/master/"
+    "data/olist_orders_dataset.csv"
+)
+
+
+def add_live_data_query(file_path: Path) -> None:
+    """Add a Power Query that pulls orders from GitHub raw CSV at refresh time.
+    Result lands in a hidden sheet `_raw_orders`. Reviewer hits Refresh All
+    -> Excel does an HTTP GET to GitHub and reloads the table."""
+    import win32com.client as w
+
+    xlSheetHidden = 2
+    xlSrcQuery = 0
+    xlCmdSql = 2
+
+    m_code = (
+        'let\n'
+        f'    Source = Csv.Document(Web.Contents("{ORDERS_RAW_URL}"),'
+        ' [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]),\n'
+        '    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars=true])\n'
+        'in\n'
+        '    Headers'
+    )
+
+    excel = w.Dispatch("Excel.Application")
+    excel.Visible = False
+    excel.DisplayAlerts = False
+    try:
+        wb = excel.Workbooks.Open(str(file_path.resolve()))
+
+        # Step 1: register the M query
+        try:
+            wb.Queries("qry_orders_live").Delete()
+        except Exception:
+            pass
+        wb.Queries.Add(Name="qry_orders_live", Formula=m_code)
+        print("  [pq] query registered")
+
+        # Step 2: prepare destination sheet
+        try:
+            wb.Sheets("_raw_orders").Delete()
+        except Exception:
+            pass
+        ws = wb.Sheets.Add()
+        ws.Name = "_raw_orders"
+
+        # Step 3: load query to sheet. Try modern PQ API first
+        # (SourceType=xlSrcQuery=3, Source=query name), then fall back to
+        # legacy OLEDB connection-string style if the modern path fails.
+        load_ok = False
+        try:
+            list_obj = ws.ListObjects.Add(
+                SourceType=3,                    # xlSrcQuery
+                Source="qry_orders_live",
+                Destination=ws.Range("A1"),
+            )
+            list_obj.DisplayName = "tbl_orders_live"
+            list_obj.QueryTable.Refresh()
+            ws.Visible = xlSheetHidden
+            load_ok = True
+            print(f"  [pq] loaded via xlSrcQuery into _raw_orders "
+                  f"({list_obj.ListRows.Count} rows)")
+        except Exception as inner_a:
+            print(f"  [pq] xlSrcQuery path failed ({type(inner_a).__name__}: {inner_a})")
+
+        if not load_ok:
+            conn_str = (
+                "OLEDB;Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;"
+                'Location=qry_orders_live;Extended Properties=""'
+            )
+            try:
+                list_obj = ws.ListObjects.Add(
+                    SourceType=0,                # xlSrcExternal (legacy OLEDB)
+                    Source=conn_str,
+                    Destination=ws.Range("A1"),
+                )
+                qt = list_obj.QueryTable
+                qt.CommandType = xlCmdSql
+                qt.CommandText = "SELECT * FROM [qry_orders_live]"
+                qt.BackgroundQuery = False
+                qt.Refresh()
+                list_obj.DisplayName = "tbl_orders_live"
+                ws.Visible = xlSheetHidden
+                load_ok = True
+                print(f"  [pq] loaded via legacy OLEDB ({list_obj.ListRows.Count} rows)")
+            except Exception as inner_b:
+                print(f"  [pq] legacy OLEDB path also failed ({type(inner_b).__name__}: {inner_b})")
+
+        if not load_ok:
+            # Both load paths failed; the query is still registered.
+            # Drop the empty placeholder sheet so the workbook stays clean.
+            try:
+                wb.Sheets("_raw_orders").Delete()
+            except Exception:
+                pass
+            print("  [pq] sheet load skipped — qry_orders_live still in "
+                  "Queries pane (Data → Queries & Connections → right-click → Load To)")
+
+        wb.Save()
+        wb.Close(SaveChanges=False)
+    finally:
+        excel.Quit()
+        del excel
+
+
+# ============================================================================
 # Post-processor: add a real PivotTable via Excel COM (win32com)
 # ============================================================================
 def add_real_pivottable(file_path: Path) -> None:
@@ -1459,13 +1581,20 @@ def main() -> None:
     wb.save(XLSX_PATH)
     print(f"Wrote base xlsx: {XLSX_PATH} ({XLSX_PATH.stat().st_size / 1024:.1f} KB)")
 
-    # Post-process: open in Excel via COM and add real PivotTable
+    # Post-process: real PivotTable + live data Power Query (both via Excel COM)
     try:
         add_real_pivottable(XLSX_PATH)
-        print(f"Added real PivotTable. Final size: {XLSX_PATH.stat().st_size / 1024:.1f} KB")
+        print(f"Added real PivotTable. Size: {XLSX_PATH.stat().st_size / 1024:.1f} KB")
     except Exception as e:
         print(f"WARN: PivotTable post-build failed ({type(e).__name__}: {e})."
               f" Base xlsx is still valid; you can add the pivot manually.")
+
+    try:
+        add_live_data_query(XLSX_PATH)
+        print(f"Added Power Query live connection. Size: {XLSX_PATH.stat().st_size / 1024:.1f} KB")
+    except Exception as e:
+        print(f"WARN: Power Query post-build failed ({type(e).__name__}: {e})."
+              f" Base xlsx is still valid; you can add the connection manually via Data > Get Data > From Web.")
 
 
 if __name__ == "__main__":
