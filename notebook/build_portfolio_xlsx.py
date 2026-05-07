@@ -491,11 +491,13 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
     s10 = refs["payment_end"] + 3
     ws.cell(row=s10, column=1, value="Derived Headlines (formulas)").font = font(bold=True, size=14, color=NAVY)
     header_row(ws, s10 + 1, ["Metric", "Formula result"], start_col=1)
-    # All derivations via structured table refs — auto-expanding, readable
-    rfm_atrisk_count_formula = '=_xlfn.XLOOKUP("At Risk",tbl_rfm[Segment],tbl_rfm[Customers],0)'
-    rfm_atrisk_arpu_formula = '=_xlfn.XLOOKUP("At Risk",tbl_rfm[Segment],tbl_rfm[ARPU (R$)],0)'
-    inst_aov_710_formula = '=_xlfn.XLOOKUP("7-10 installments",tbl_installments[Bucket],tbl_installments[Avg Ticket (R$)],0)'
-    inst_aov_1_formula = '=_xlfn.XLOOKUP("1 (single)",tbl_installments[Bucket],tbl_installments[Avg Ticket (R$)],0)'
+    # Derivations look up _data_calc by column-A name. Keys ("At Risk",
+    # "7-10 installments", "1 (single)") only exist in their respective
+    # sections, so first-match XLOOKUP returns the right row.
+    rfm_atrisk_count_formula = '=_xlfn.XLOOKUP("At Risk",_data_calc!$A:$A,_data_calc!$B:$B,0)'
+    rfm_atrisk_arpu_formula = '=_xlfn.XLOOKUP("At Risk",_data_calc!$A:$A,_data_calc!$F:$F,0)'
+    inst_aov_710_formula = '=_xlfn.XLOOKUP("7-10 installments",_data_calc!$A:$A,_data_calc!$C:$C,0)'
+    inst_aov_1_formula = '=_xlfn.XLOOKUP("1 (single)",_data_calc!$A:$A,_data_calc!$C:$C,0)'
 
     headline_metrics = [
         ("At-Risk count (from RFM)", rfm_atrisk_count_formula, "#,##0"),
@@ -508,9 +510,8 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
         # Derived: AOV ratio 7-10 / 1
         ("AOV ratio (7-10 / 1)",
          f"=B{s10+4}/B{s10+5}", "0.00"),
-        # Repeat rate (already in KPI lookup) — XLOOKUP via structured ref
         ("Cross-month repeat rate",
-         '=_xlfn.XLOOKUP("Cross-month repeat rate",tbl_kpi_lookup[Metric],tbl_kpi_lookup[Value],0)',
+         '=_xlfn.XLOOKUP("Cross-month repeat rate",_data_calc!$A:$A,_data_calc!$B:$B,0)',
          "0.00%"),
     ]
     for i, (label, fml, fmt) in enumerate(headline_metrics):
@@ -530,9 +531,10 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
 
 
 def kpi_lookup_formula(refs: dict, metric_name: str) -> str:
-    """XLOOKUP using structured table reference. tbl_kpi_lookup auto-resizes
-    when rows are added in _data_calc — no fixed range to maintain."""
-    return f'=_xlfn.XLOOKUP("{metric_name}",tbl_kpi_lookup[Metric],tbl_kpi_lookup[Value],0)'
+    """XLOOKUP via whole-column refs — visible sheet name + column letter
+    so reviewers see exactly where the data lives (`_data_calc` column A vs B).
+    Whole columns scan everything so adding rows never breaks the formula."""
+    return f'=_xlfn.XLOOKUP("{metric_name}",_data_calc!$A:$A,_data_calc!$B:$B,0)'
 
 
 # ============================================================================
@@ -809,28 +811,36 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
         c.alignment = right()
         c.border = BORDER
 
+    # Replace hardcoded "Total orders" strings inside kpi_lookup_formula
+    # with cell refs to the label column (B). This makes the formula
+    # data-driven: change B7's label and C7 follows.
+    for i, (k, _fmt) in enumerate(overview_metrics):
+        r = 7 + i
+        cell = ws.cell(row=r, column=3)
+        cell.value = f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)'
+
     overview_end = 6 + len(overview_metrics)
 
-    # ---- Yearly KPIs — XLOOKUP via structured table refs ----
+    # ---- Yearly KPIs — XLOOKUP via _data_calc whole-column refs ----
     yk_row = overview_end + 3
     section_header(ws, yk_row, "Year-over-Year KPIs")
     header_row(ws, yk_row + 1, ["Year", "GMV (R$ M)", "Orders", "Avg Review", "Avg Delivery (days)"])
     yearly = read_csv("kpi_yearly.csv")
-    yk_table_cols = ["GMV (R$ M)", "Orders", "Avg Review", "Avg Delivery (days)"]
+    yk_value_cols = ["B", "C", "D", "E"]   # GMV / Orders / Review / Delivery in _data_calc
     yk_fmts = ["0.00", "#,##0", "0.00", "0.00"]
     years = [int(row["年份"]) for row in yearly]
     for i, yr in enumerate(years):
         r = yk_row + 2 + i
         ws.cell(row=r, column=2, value=yr).border = BORDER
         ws.cell(row=r, column=2).alignment = left()
-        for ci, (col_name, fmt) in enumerate(zip(yk_table_cols, yk_fmts)):
+        for ci, (val_col, fmt) in enumerate(zip(yk_value_cols, yk_fmts)):
             cell = ws.cell(row=r, column=3 + ci,
-                           value=f'=_xlfn.XLOOKUP(B{r},tbl_yearly[Year],tbl_yearly[{col_name}],0)')
+                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!${val_col}:${val_col},0)')
             cell.number_format = fmt
             cell.border = BORDER
             cell.alignment = center()
 
-    # ---- Order Status — XLOOKUP via tbl_status_raw ----
+    # ---- Order Status — XLOOKUP keyed by B-column label ----
     st_row = yk_row + 2 + len(yearly) + 2
     section_header(ws, st_row, "Order Status Distribution (from raw)")
     header_row(ws, st_row + 1, ["Status", "Orders", "Share"])
@@ -839,15 +849,15 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
         r = st_row + 2 + i
         ws.cell(row=r, column=2, value=s).border = BORDER
         c = ws.cell(row=r, column=3,
-                    value=f'=_xlfn.XLOOKUP("{s}",tbl_status_raw[Status],tbl_status_raw[Orders],0)')
+                    value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
         c.number_format = "#,##0"; c.border = BORDER
         c2 = ws.cell(row=r, column=4,
-                     value=f'=_xlfn.XLOOKUP("{s}",tbl_status_raw[Status],tbl_status_raw[Share],0)')
+                     value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$C:$C,0)')
         c2.number_format = "0.0%"; c2.border = BORDER
     st_end = st_row + 1 + len(statuses_known)
     add_table(ws, f"B{st_row + 1}:D{st_end}", "tbl_status")
 
-    # ---- Payment Mix — XLOOKUP via tbl_payment_raw ----
+    # ---- Payment Mix — XLOOKUP keyed by B-column label ----
     pm_row = st_end + 3
     section_header(ws, pm_row, "Payment Mix (from raw)")
     header_row(ws, pm_row + 1, ["Payment type", "Orders", "Share", "Avg installments"])
@@ -856,13 +866,13 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
         r = pm_row + 2 + i
         ws.cell(row=r, column=2, value=p).border = BORDER
         c = ws.cell(row=r, column=3,
-                    value=f'=_xlfn.XLOOKUP("{p}",tbl_payment_raw[Payment type],tbl_payment_raw[Orders],0)')
+                    value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
         c.number_format = "#,##0"; c.border = BORDER
         c2 = ws.cell(row=r, column=4,
-                     value=f'=_xlfn.XLOOKUP("{p}",tbl_payment_raw[Payment type],tbl_payment_raw[Share],0)')
+                     value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$C:$C,0)')
         c2.number_format = "0.0%"; c2.border = BORDER
         c3 = ws.cell(row=r, column=5,
-                     value=f'=_xlfn.XLOOKUP("{p}",tbl_payment_raw[Payment type],tbl_payment_raw[Avg installments],0)')
+                     value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$D:$D,0)')
         c3.number_format = "0.0"; c3.border = BORDER
     pm_end = pm_row + 1 + len(payments_known)
     add_table(ws, f"B{pm_row + 1}:E{pm_end}", "tbl_payment")
@@ -887,7 +897,7 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
         r = 6 + i
         ws.cell(row=r, column=2, value=month).border = BORDER
         cell = ws.cell(row=r, column=3,
-                       value=f'=_xlfn.XLOOKUP(B{r},tbl_revenue[Month],tbl_revenue[Revenue (R$)],0)')
+                       value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
         cell.number_format = "#,##0"
         cell.border = BORDER
     end_row = 5 + len(months)
@@ -943,16 +953,16 @@ def build_rfm(wb: Workbook, refs: dict) -> None:
     priority = ["冠軍客戶", "流失風險", "忠誠客戶", "一般客戶", "潛力新客", "已流失"]
     rfm_sorted = sorted(rfm, key=lambda r: priority.index(r["segment"]))
 
-    rfm_table_cols = ["Customers", "Customer %", "Revenue (R$)", "Revenue %", "ARPU (R$)", "Avg Recency (d)"]
+    rfm_value_cols = ["B", "C", "D", "E", "F", "G"]   # _data_calc cols
     rfm_fmts = ["#,##0", "0.0%", "#,##0", "0.0%", "0", "0"]
     for i, row in enumerate(rfm_sorted):
         r = 6 + i
         en = seg_map[row["segment"]]
         ws.cell(row=r, column=2, value=en).font = font(bold=True)
         ws.cell(row=r, column=2).border = BORDER
-        for ci, (col_name, fmt) in enumerate(zip(rfm_table_cols, rfm_fmts)):
+        for ci, (val_col, fmt) in enumerate(zip(rfm_value_cols, rfm_fmts)):
             cell = ws.cell(row=r, column=3 + ci,
-                           value=f'=_xlfn.XLOOKUP(B{r},tbl_rfm[Segment],tbl_rfm[{col_name}],0)')
+                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!${val_col}:${val_col},0)')
             cell.number_format = fmt
             cell.border = BORDER
         p = ws.cell(row=r, column=9, value=persona_map[en])
@@ -1067,9 +1077,11 @@ def build_roi(wb: Workbook, refs: dict) -> None:
                 "Edit yellow cells — scenarios recompute live.",
                 span=6)
 
-    # XLOOKUP-derived defaults via tbl_rfm structured refs (auto-resize).
-    at_risk_count_formula = '=_xlfn.XLOOKUP("At Risk",tbl_rfm[Segment],tbl_rfm[Customers],0)'
-    at_risk_arpu_formula = '=_xlfn.XLOOKUP("At Risk",tbl_rfm[Segment],tbl_rfm[ARPU (R$)],0)'
+    # XLOOKUP-derived defaults via _data_calc whole-column refs.
+    # Key "At Risk" stays as a literal because this is a modeling assumption
+    # (we are specifically modeling the At-Risk segment for win-back).
+    at_risk_count_formula = '=_xlfn.XLOOKUP("At Risk",_data_calc!$A:$A,_data_calc!$B:$B,0)'
+    at_risk_arpu_formula = '=_xlfn.XLOOKUP("At Risk",_data_calc!$A:$A,_data_calc!$F:$F,0)'
 
     # ---- Inputs ----
     section_header(ws, 5, "INPUTS — edit me")
@@ -1209,14 +1221,13 @@ def build_installments(wb: Workbook, refs: dict) -> None:
     header_row(ws, 5, ["Installment bucket", "Orders", "Avg ticket (R$)", "Customers", "Repeat rate"])
     bucket_labels = ["1 (single)", "2-3 installments", "4-6 installments",
                      "7-10 installments", "11+ installments"]
-    inst_cols = [("Orders", "#,##0"), ("Avg Ticket (R$)", "0"),
-                 ("Customers", "#,##0"), ("Repeat Rate", "0.00%")]
+    inst_cols = [("B", "#,##0"), ("C", "0"), ("D", "#,##0"), ("E", "0.00%")]
     for i, label in enumerate(bucket_labels):
         r = 6 + i
         ws.cell(row=r, column=2, value=label).border = BORDER
-        for ci, (col_name, fmt) in enumerate(inst_cols):
+        for ci, (val_col, fmt) in enumerate(inst_cols):
             cell = ws.cell(row=r, column=3 + ci,
-                           value=f'=_xlfn.XLOOKUP(B{r},tbl_installments[Bucket],tbl_installments[{col_name}],0)')
+                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!${val_col}:${val_col},0)')
             cell.number_format = fmt
             cell.border = BORDER
 
@@ -1280,14 +1291,14 @@ def build_logistics(wb: Workbook, refs: dict) -> None:
     log = read_csv("logistics.csv")
     header_row(ws, 5, ["State", "Actual days", "Estimated days", "ETA gap (days)"])
     state_codes = [row["州"] for row in log]
-    log_cols = ["Actual days", "Estimated days", "ETA gap (days)"]
+    log_value_cols = ["B", "C", "D"]
     for i, state in enumerate(state_codes):
         r = 6 + i
         ws.cell(row=r, column=2, value=state).font = font(bold=True)
         ws.cell(row=r, column=2).border = BORDER
-        for ci, col_name in enumerate(log_cols):
+        for ci, val_col in enumerate(log_value_cols):
             cell = ws.cell(row=r, column=3 + ci,
-                           value=f'=_xlfn.XLOOKUP(B{r},tbl_logistics[State],tbl_logistics[{col_name}],0)')
+                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!${val_col}:${val_col},0)')
             cell.number_format = "0.0"
             cell.border = BORDER
 
