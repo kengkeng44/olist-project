@@ -1032,7 +1032,7 @@ def build_cohort(wb: Workbook, refs: dict) -> None:
 # ============================================================================
 # 07_ROI_Calculator — Named Ranges + live formulas
 # ============================================================================
-def build_roi(wb: Workbook) -> None:
+def build_roi(wb: Workbook, refs: dict) -> None:
     ws = wb.create_sheet("07_ROI_Calculator")
     ws.sheet_view.showGridLines = False
     set_col_widths(ws, {"A": 2, "B": 32, "C": 18, "D": 18, "E": 18, "F": 18, "G": 18, "H": 2})
@@ -1041,18 +1041,26 @@ def build_roi(wb: Workbook) -> None:
                 "Edit yellow cells — scenarios recompute live.",
                 span=6)
 
+    # XLOOKUP-derived defaults pulled from RFM (data-driven) — user can still
+    # type over these to model different segments.
+    rfm_seg_range = f"_data_calc!$A${refs['rfm_start']}:$A${refs['rfm_end']}"
+    rfm_count_range = f"_data_calc!$B${refs['rfm_start']}:$B${refs['rfm_end']}"
+    rfm_arpu_range = f"_data_calc!$F${refs['rfm_start']}:$F${refs['rfm_end']}"
+    at_risk_count_formula = f'=_xlfn.XLOOKUP("At Risk",{rfm_seg_range},{rfm_count_range},0)'
+    at_risk_arpu_formula = f'=_xlfn.XLOOKUP("At Risk",{rfm_seg_range},{rfm_arpu_range},0)'
+
     # ---- Inputs ----
     section_header(ws, 5, "INPUTS — edit me")
     header_row(ws, 6, ["Parameter", "Value", "Format", "Notes"])
     inputs = [
-        ("At-risk customers (segment size)", 21975, "#,##0",
-         "From RFM analysis", "At_Risk_Count"),
-        ("Avg ARPU per customer (R$)", 213, "0",
-         "Historical average for At-Risk segment", "ARPU"),
+        ("At-risk customers (segment size)", at_risk_count_formula, "#,##0",
+         "XLOOKUP from RFM segment", "At_Risk_Count"),
+        ("Avg ARPU per customer (R$)", at_risk_arpu_formula, "0",
+         "XLOOKUP from RFM segment", "ARPU"),
         ("Repeat-spend rate (% of ARPU on win-back order)", 0.50, "0%",
-         "Conservative: assumes win-back order = 50% of historical average", "Repeat_Spend"),
+         "Modeling assumption (50% of historical avg)", "Repeat_Spend"),
         ("Total CRM cost (R$)", 50000, "#,##0",
-         "Email + discount voucher budget", "CRM_Cost"),
+         "Budget assumption (email + discount voucher)", "CRM_Cost"),
     ]
     for i, (label, val, fmt, note, _name) in enumerate(inputs):
         r = 7 + i
@@ -1418,7 +1426,7 @@ def main() -> None:
     build_revenue(wb, refs)
     build_rfm(wb, refs)
     build_cohort(wb, refs)
-    build_roi(wb)
+    build_roi(wb, refs)
     build_installments(wb, refs)
     build_logistics(wb, refs)
     build_pivot_analysis(wb)
