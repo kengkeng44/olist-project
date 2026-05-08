@@ -538,6 +538,24 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
     refs["cell_aov_ratio"] = f"_data_calc!$B${s10+7}"
     refs["cell_repeat_rate"] = f"_data_calc!$B${s10+8}"
 
+    # ---- Section 11: Constants / Modeling assumptions ----
+    s11 = refs["headline_end"] + 3
+    ws.cell(row=s11, column=1, value="Constants / Modeling assumptions").font = font(bold=True, size=14, color=NAVY)
+    header_row(ws, s11 + 1, ["Constant", "Value"], start_col=1)
+    constants = [
+        ("Default Repeat-spend rate", 0.50, "0.00%"),
+        ("Default CRM cost (R$)", 50000, "#,##0"),
+        ("Default Custom recall rate", 0.10, "0.00%"),
+    ]
+    for i, (k, v, fmt) in enumerate(constants):
+        r = s11 + 2 + i
+        ws.cell(row=r, column=1, value=k)
+        c = ws.cell(row=r, column=2, value=v)
+        c.number_format = fmt
+    refs["const_start"] = s11 + 2
+    refs["const_end"] = s11 + 1 + len(constants)
+    add_table(ws, f"A{s11+1}:B{refs['const_end']}", "tbl_constants")
+
     return refs
 
 
@@ -651,20 +669,23 @@ def build_cover(wb: Workbook, refs: dict) -> None:
     section_header(ws, 17, "SHEETS IN THIS WORKBOOK")
     header_row(ws, 18, ["#", "Sheet", "What it shows"])
     toc_entries = [
-        ("02", "02_Data_Dictionary", "9-table schema + 3-row samples"),
-        ("03", "03_KPI_Dashboard", "Scale / Yearly KPIs / Status / Payment — XLOOKUP"),
-        ("04", "04_Revenue_Trend", "Monthly revenue + line chart"),
-        ("05", "05_RFM_Segments", "RFM segments (NTILE) + Pareto + icon set"),
-        ("06", "06_Cohort_Heatmap", "13-month retention matrix (color scale)"),
-        ("07", "07_ROI_Calculator", "Live formulas + Named Ranges"),
-        ("08", "08_Installments", "AOV + repeat rate by installment bucket"),
-        ("09", "09_Logistics", "State ETA gap with 3-color scale"),
-        ("10", "10_Pivot_Analysis", "★ Real PivotTable: state × payment_type"),
+        (2, "02_Data_Dictionary", "9-table schema + 3-row samples"),
+        (3, "03_KPI_Dashboard", "Scale / Yearly KPIs / Status / Payment — XLOOKUP"),
+        (4, "04_Revenue_Trend", "Monthly revenue + line chart + MoM growth"),
+        (5, "05_RFM_Segments", "RFM segments (NTILE) + Pareto + icon set"),
+        (6, "06_Cohort_Heatmap", "13-month retention matrix (color scale)"),
+        (7, "07_ROI_Calculator", "Live formulas + Named Ranges"),
+        (8, "08_Installments", "AOV + repeat rate by installment bucket"),
+        (9, "09_Logistics", "State ETA gap with 3-color scale"),
+        (10, "10_Pivot_Analysis", "★ Real PivotTable: state × payment_type"),
     ]
     for i, (num, sheet, desc) in enumerate(toc_entries):
         r = 19 + i
         is_pivot = sheet == "10_Pivot_Analysis"
-        ws.cell(row=r, column=2, value=num).alignment = center()
+        # Store as int with "00" format so no green "number stored as text" triangle
+        n_cell = ws.cell(row=r, column=2, value=num)
+        n_cell.number_format = "00"
+        n_cell.alignment = center()
         c = ws.cell(row=r, column=3, value=sheet)
         c.font = font(bold=True, color="0563C1")
         c.hyperlink = f"#'{sheet}'!A1"
@@ -806,7 +827,7 @@ def build_data_dictionary(wb: Workbook) -> None:
 def build_kpis(wb: Workbook, refs: dict) -> None:
     ws = wb.create_sheet("03_KPI_Dashboard")
     ws.sheet_view.showGridLines = False
-    set_col_widths(ws, {"A": 2, "B": 32, "C": 18, "D": 18, "E": 18, "F": 18, "G": 2})
+    set_col_widths(ws, {"A": 2, "B": 32, "C": 18, "D": 18, "E": 18, "F": 18, "G": 14, "H": 2})
 
     title_block(ws, 2, "Data Overview & KPIs", span=5)
 
@@ -845,10 +866,11 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
 
     overview_end = 6 + len(overview_metrics)
 
-    # ---- Yearly KPIs — XLOOKUP via _data_calc whole-column refs ----
+    # ---- Yearly KPIs — XLOOKUP via _data_calc + visible YoY growth ----
     yk_row = overview_end + 3
     section_header(ws, yk_row, "Year-over-Year KPIs")
-    header_row(ws, yk_row + 1, ["Year", "GMV (R$ M)", "Orders", "Avg Review", "Avg Delivery (days)"])
+    header_row(ws, yk_row + 1,
+               ["Year", "GMV (R$ M)", "Orders", "Avg Review", "Avg Delivery (days)", "GMV YoY"])
     yearly = read_csv("kpi_yearly.csv")
     yk_value_cols = ["B", "C", "D", "E"]   # GMV / Orders / Review / Delivery in _data_calc
     yk_fmts = ["0.00", "#,##0", "0.00", "0.00"]
@@ -863,6 +885,26 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
             cell.number_format = fmt
             cell.border = BORDER
             cell.alignment = center()
+        # Column G = GMV YoY growth = this row's GMV / previous row's GMV - 1
+        if i == 0:
+            yoy = ws.cell(row=r, column=7, value="—")
+            yoy.alignment = center()
+        else:
+            yoy = ws.cell(row=r, column=7, value=f"=C{r}/C{r-1}-1")
+            yoy.number_format = "+0.0%;-0.0%;0.0%"
+        yoy.border = BORDER
+    yk_first = yk_row + 2
+    yk_last = yk_row + 1 + len(years)
+    # Color scale on YoY growth column (red shrink → green grow)
+    if yk_last > yk_first:
+        ws.conditional_formatting.add(
+            f"G{yk_first + 1}:G{yk_last}",
+            ColorScaleRule(
+                start_type="num", start_value=-0.5, start_color="F8696B",
+                mid_type="num", mid_value=0, mid_color="FFFFFF",
+                end_type="num", end_value=0.5, end_color="63BE7B",
+            ),
+        )
 
     # ---- Order Status — Share computed via SUM on this sheet (DIVISION VISIBLE) ----
     st_row = yk_row + 2 + len(yearly) + 2
@@ -1155,17 +1197,22 @@ def build_roi(wb: Workbook, refs: dict) -> None:
     at_risk_arpu_formula = '=_xlfn.XLOOKUP("At Risk",_data_calc!$A:$A,_data_calc!$F:$F,0)'
 
     # ---- Inputs ----
+    # All four inputs are formulas pulling from _data_calc — no bare literals.
+    # User can still type any number into the yellow cell to override (the
+    # formula gets replaced on edit).
+    repeat_spend_formula = '=_xlfn.XLOOKUP("Default Repeat-spend rate",_data_calc!$A:$A,_data_calc!$B:$B,0)'
+    crm_cost_formula = '=_xlfn.XLOOKUP("Default CRM cost (R$)",_data_calc!$A:$A,_data_calc!$B:$B,0)'
     section_header(ws, 5, "INPUTS — edit me")
-    header_row(ws, 6, ["Parameter", "Value", "Format", "Notes"])
+    header_row(ws, 6, ["Parameter", "Value", "Notes"])
     inputs = [
         ("At-risk customers (segment size)", at_risk_count_formula, "#,##0",
          "XLOOKUP from RFM segment", "At_Risk_Count"),
         ("Avg ARPU per customer (R$)", at_risk_arpu_formula, "0",
          "XLOOKUP from RFM segment", "ARPU"),
-        ("Repeat-spend rate (% of ARPU on win-back order)", 0.50, "0%",
-         "Modeling assumption (50% of historical avg)", "Repeat_Spend"),
-        ("Total CRM cost (R$)", 50000, "#,##0",
-         "Budget assumption (email + discount voucher)", "CRM_Cost"),
+        ("Repeat-spend rate (% of ARPU on win-back order)", repeat_spend_formula, "0%",
+         "XLOOKUP from _data_calc Constants", "Repeat_Spend"),
+        ("Total CRM cost (R$)", crm_cost_formula, "#,##0",
+         "XLOOKUP from _data_calc Constants", "CRM_Cost"),
     ]
     for i, (label, val, fmt, note, _name) in enumerate(inputs):
         r = 7 + i
@@ -1178,11 +1225,9 @@ def build_roi(wb: Workbook, refs: dict) -> None:
         medium_orange = Side(style="medium", color=ORANGE)
         c.border = Border(left=medium_orange, right=medium_orange,
                           top=medium_orange, bottom=medium_orange)
-        ws.cell(row=r, column=4, value=fmt).font = font(italic=True, size=9, color=DARK_GRAY)
-        ws.cell(row=r, column=5, value=note).font = font(italic=True, size=9, color=DARK_GRAY)
+        ws.cell(row=r, column=4, value=note).font = font(italic=True, size=9, color=DARK_GRAY)
         ws.cell(row=r, column=2).border = BORDER
         ws.cell(row=r, column=4).border = BORDER
-        ws.cell(row=r, column=5).border = BORDER
 
     # Named Ranges for inputs (point at the value cells C7..C10)
     add_named_range(wb, "At_Risk_Count", "07_ROI_Calculator", "$C$7")
@@ -1195,12 +1240,11 @@ def build_roi(wb: Workbook, refs: dict) -> None:
     header_row(ws, 14, ["Metric", "Conservative (5%)", "Optimistic (10%)",
                         "Aggressive (20%)", "Custom"])
 
-    # Scenario columns aligned with header columns: C=Conservative, D=Optimistic,
-    # E=Aggressive, F=Custom (yellow = editable). Off-by-one bug fixed here.
-    scenarios = [("C", 0.05), ("D", 0.10), ("E", 0.20), ("F", 0.10)]
+    # Scenario columns: C=Conservative 5%, D=Optimistic 10%, E=Aggressive 20%,
+    # F=Custom (yellow + editable, defaults to =D15 i.e. mirrors Optimistic).
+    scenarios = [("C", 0.05), ("D", 0.10), ("E", 0.20), ("F", "=D15")]
     custom_col = "F"
 
-    # Recall rate row
     ws.cell(row=15, column=2, value="Recall rate (%)").font = font(bold=True)
     ws.cell(row=15, column=2).border = BORDER
     for col_letter, default in scenarios:
