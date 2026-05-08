@@ -915,22 +915,39 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
 def build_revenue(wb: Workbook, refs: dict) -> None:
     ws = wb.create_sheet("04_Revenue_Trend")
     ws.sheet_view.showGridLines = False
-    set_col_widths(ws, {"A": 2, "B": 14, "C": 18, "D": 2})
+    set_col_widths(ws, {"A": 2, "B": 14, "C": 18, "D": 14, "E": 2})
 
-    title_block(ws, 2, "Monthly Revenue Trend (2017–2018)", span=2)
+    title_block(ws, 2, "Monthly Revenue Trend (2017–2018)", span=3)
 
     rev = read_csv("revenue.csv")
-    header_row(ws, 5, ["Month", "Revenue (R$)"])
+    header_row(ws, 5, ["Month", "Revenue (R$)", "MoM growth"])
     months = [row["月份"] for row in rev]
     for i, month in enumerate(months):
         r = 6 + i
         ws.cell(row=r, column=2, value=month).border = BORDER
-        cell = ws.cell(row=r, column=3,
-                       value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
-        cell.number_format = "#,##0"
-        cell.border = BORDER
+        # Revenue — XLOOKUP from _data_calc
+        c_rev = ws.cell(row=r, column=3,
+                        value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
+        c_rev.number_format = "#,##0"; c_rev.border = BORDER
+        # MoM growth = (this month / previous month) - 1 — VISIBLE DIVISION
+        # First row has no previous → leave blank.
+        if i == 0:
+            ws.cell(row=r, column=4, value="—").alignment = center()
+            ws.cell(row=r, column=4).border = BORDER
+        else:
+            c_mom = ws.cell(row=r, column=4, value=f"=C{r}/C{r-1}-1")
+            c_mom.number_format = "+0.0%;-0.0%;0.0%"; c_mom.border = BORDER
     end_row = 5 + len(months)
-    add_table(ws, f"B5:C{end_row}", "tbl_revenue_view")
+    add_table(ws, f"B5:D{end_row}", "tbl_revenue_view")
+    # Conditional formatting on MoM growth: 3-color scale (red neg / white 0 / green pos)
+    ws.conditional_formatting.add(
+        f"D7:D{end_row}",
+        ColorScaleRule(
+            start_type="num", start_value=-0.5, start_color="F8696B",
+            mid_type="num", mid_value=0, mid_color="FFFFFF",
+            end_type="num", end_value=0.5, end_color="63BE7B",
+        ),
+    )
 
     # Line chart
     chart = LineChart()
@@ -982,18 +999,43 @@ def build_rfm(wb: Workbook, refs: dict) -> None:
     priority = ["冠軍客戶", "流失風險", "忠誠客戶", "一般客戶", "潛力新客", "已流失"]
     rfm_sorted = sorted(rfm, key=lambda r: priority.index(r["segment"]))
 
-    rfm_value_cols = ["B", "C", "D", "E", "F", "G"]   # _data_calc cols
-    rfm_fmts = ["#,##0", "0.0%", "#,##0", "0.0%", "0", "0"]
+    # Math made visible:
+    #   Customer % = Customers / SUM(Customers)        (this sheet's column)
+    #   Revenue %  = Revenue   / SUM(Revenue)          (this sheet's column)
+    #   ARPU       = Revenue   / Customers             (same row)
+    # Customers, Revenue, Recency stay as XLOOKUP from _data_calc.
+    rfm_first = 6
+    rfm_last = rfm_first + len(rfm_sorted) - 1
     for i, row in enumerate(rfm_sorted):
         r = 6 + i
         en = seg_map[row["segment"]]
         ws.cell(row=r, column=2, value=en).font = font(bold=True)
         ws.cell(row=r, column=2).border = BORDER
-        for ci, (val_col, fmt) in enumerate(zip(rfm_value_cols, rfm_fmts)):
-            cell = ws.cell(row=r, column=3 + ci,
-                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!${val_col}:${val_col},0)')
-            cell.number_format = fmt
-            cell.border = BORDER
+
+        # C = Customers (XLOOKUP from _data_calc col B)
+        c_cust = ws.cell(row=r, column=3,
+                         value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
+        c_cust.number_format = "#,##0"; c_cust.border = BORDER
+        # D = Customer % = C{r} / SUM(C6:C11) — VISIBLE DIVISION
+        c_cpct = ws.cell(row=r, column=4,
+                         value=f"=C{r}/SUM($C${rfm_first}:$C${rfm_last})")
+        c_cpct.number_format = "0.0%"; c_cpct.border = BORDER
+        # E = Revenue (XLOOKUP from _data_calc col D)
+        c_rev = ws.cell(row=r, column=5,
+                        value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$D:$D,0)')
+        c_rev.number_format = "#,##0"; c_rev.border = BORDER
+        # F = Revenue % = E{r} / SUM(E6:E11) — VISIBLE DIVISION
+        c_rpct = ws.cell(row=r, column=6,
+                         value=f"=E{r}/SUM($E${rfm_first}:$E${rfm_last})")
+        c_rpct.number_format = "0.0%"; c_rpct.border = BORDER
+        # G = ARPU = Revenue / Customers (same row) — VISIBLE DIVISION
+        c_arpu = ws.cell(row=r, column=7, value=f"=E{r}/C{r}")
+        c_arpu.number_format = "0"; c_arpu.border = BORDER
+        # H = Avg Recency (XLOOKUP from _data_calc col G)
+        c_rec = ws.cell(row=r, column=8,
+                        value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$G:$G,0)')
+        c_rec.number_format = "0"; c_rec.border = BORDER
+
         p = ws.cell(row=r, column=9, value=persona_map[en])
         p.alignment = left()
         p.border = BORDER
