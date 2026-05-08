@@ -1266,8 +1266,13 @@ def build_roi(wb: Workbook, refs: dict) -> None:
                         "Aggressive (20%)", "Custom"])
 
     # Scenario columns: C=Conservative 5%, D=Optimistic 10%, E=Aggressive 20%,
-    # F=Custom (yellow + editable, defaults to =D15 i.e. mirrors Optimistic).
-    scenarios = [("C", 0.05), ("D", 0.10), ("E", 0.20), ("F", "=D15")]
+    # F=Custom (yellow + editable, default pulled from _data_calc Constants
+    # via XLOOKUP — same pattern as C9/C10 inputs above).
+    custom_default_formula = (
+        '=_xlfn.XLOOKUP("Default Custom recall rate",'
+        '_data_calc!$A:$A,_data_calc!$B:$B,0)'
+    )
+    scenarios = [("C", 0.05), ("D", 0.10), ("E", 0.20), ("F", custom_default_formula)]
     custom_col = "F"
 
     ws.cell(row=15, column=2, value="Recall rate (%)").font = font(bold=True)
