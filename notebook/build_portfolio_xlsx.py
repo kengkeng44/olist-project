@@ -140,6 +140,10 @@ VARIETY_COL: dict[str, int] = {
     "olist_order_items_dataset.csv": 1,       # order_item_id (1, 2, 3 → multi-item)
     "olist_order_payments_dataset.csv": 2,    # payment_type (credit_card / boleto / voucher)
     "olist_order_reviews_dataset.csv": 2,     # review_score (1 / 3 / 5)
+    "olist_products_dataset.csv": 1,          # product_category_name
+    "olist_sellers_dataset.csv": 3,           # seller_state
+    "olist_geolocation_dataset.csv": 4,       # geolocation_state
+    # product_category_name_translation: only 71 rows, first 3 are fine
 }
 
 
@@ -777,13 +781,17 @@ def build_data_dictionary(wb: Workbook) -> None:
     schema_end = 6 + len(schema)
     add_table(ws, f"B6:D{schema_end}", "tbl_schema")
 
-    # Sample blocks — 3 rows each, the 5 most-joined tables
+    # Sample blocks — 3 rows each, all 9 source tables
     sample_files = [
         ("orders", "olist_orders_dataset.csv"),
         ("customers", "olist_customers_dataset.csv"),
         ("items", "olist_order_items_dataset.csv"),
         ("payments", "olist_order_payments_dataset.csv"),
         ("reviews", "olist_order_reviews_dataset.csv"),
+        ("products", "olist_products_dataset.csv"),
+        ("sellers", "olist_sellers_dataset.csv"),
+        ("geolocation", "olist_geolocation_dataset.csv"),
+        ("translation", "product_category_name_translation.csv"),
     ]
     cur_row = schema_end + 3
     for short, filename in sample_files:
