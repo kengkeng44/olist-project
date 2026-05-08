@@ -1666,18 +1666,19 @@ def add_real_pivottable(file_path: Path) -> None:
 
         pt.PivotFields("State").Orientation = xlRowField
         pt.PivotFields("Payment type").Orientation = xlColumnField
-        data_field = pt.PivotFields("Orders")
-        data_field.Orientation = xlDataField
+        pt.PivotFields("Orders").Orientation = xlDataField
 
-        # Force English labels — defaults pick the user's locale (Chinese in
-        # this case → "列標籤" / "欄標籤" / "加總 - Orders" / "總計").
+        # Force English labels — Excel auto-names the data field in the user's
+        # locale ("加總 - Orders" on zh-TW, "Sum of Orders" on en-US). Look it
+        # up by index instead of by locale-specific name.
         try:
-            sum_field = pt.PivotFields("Sum of Orders")
-            sum_field.Function = xlSum
-            sum_field.NumberFormat = "#,##0"
-            sum_field.Caption = "Total Orders"          # was "加總 - Orders"
-        except Exception:
-            pass
+            df = pt.DataFields(1)            # first (and only) data field
+            df.Function = xlSum
+            df.NumberFormat = "#,##0"
+            df.Caption = "Total Orders "     # trailing space avoids collision
+                                             # with source field name "Orders"
+        except Exception as e:
+            print(f"  [pivot] data field rename failed: {e}")
         try:
             pt.GrandTotalName = "Grand Total"            # was "總計"
         except Exception:
