@@ -599,14 +599,19 @@ def build_cover(wb: Workbook, refs: dict) -> None:
         ws.cell(row=5 + i, column=2, value=k).font = font(bold=True, color=NAVY)
         ws.cell(row=5 + i, column=3, value=v).font = font()
 
-    # Headline metrics — formulas pulling from _data_calc Derived Headlines
+    # Headline metrics — direct cell refs + cell number_format.
+    # Formula bar shows a clean ref like =_data_calc!$B$139; the display
+    # string ("R$ 469K", "1.81%", "3.48×") is produced by the cell format.
     section_header(ws, 9, "THREE HEADLINE FINDINGS (formula-driven)")
-    # Big-number cells use TEXT() to format the formula result inline as the
-    # display string the reviewer sees. Each big number is computed live.
     big_formulas = [
-        f'="R$ "&TEXT({refs["cell_aggressive_roi"]}/1000,"0")&"K"',
-        f'=TEXT({refs["cell_repeat_rate"]},"0.00%")',
-        f'=TEXT({refs["cell_aov_ratio"]},"0.00")&"×"',
+        f'={refs["cell_aggressive_roi"]}',
+        f'={refs["cell_repeat_rate"]}',
+        f'={refs["cell_aov_ratio"]}',
+    ]
+    big_formats = [
+        '"R$ "#,##0,"K"',   # 468,068 → R$ 468K  (the comma after 0 = scale by thousands)
+        "0.00%",            # 0.0181  → 1.81%
+        '0.00"×"',          # 3.48    → 3.48×
     ]
     mid_labels = [
         "Win-back revenue opportunity",
@@ -628,6 +633,7 @@ def build_cover(wb: Workbook, refs: dict) -> None:
         c.fill = fill([NAVY, TEAL, ORANGE][i])
         c.alignment = center()
         c.border = BORDER
+        c.number_format = big_formats[i]
         c2 = ws.cell(row=12, column=col, value=mid_labels[i])
         c2.font = font(size=11, bold=True, color=WHITE)
         c2.fill = fill([NAVY, TEAL, ORANGE][i])
@@ -639,31 +645,19 @@ def build_cover(wb: Workbook, refs: dict) -> None:
         c3.alignment = center()
         c3.border = BORDER
 
-    # ---- PivotTable callout banner — single orange row pointing at sheet 10 ----
-    callout_text = ("→  INTERACTIVE PivotTable on sheet  10_Pivot_Analysis  "
-                    "(drag fields to change view, right-click for Slicer, double-click to drill)")
+    # ---- Combined callout banner (TEAL = same as middle headline card) ----
+    # PivotTable + Live Query info merged into one row.
+    combined_text = ("→  INTERACTIVE PivotTable: sheet  10_Pivot_Analysis  "
+                     "·  LIVE QUERY: Data → Queries → 'qry_orders_live' → Load To...")
     ws.row_dimensions[15].height = 22
-    cb = ws.cell(row=15, column=2, value=callout_text)
+    cb = ws.cell(row=15, column=2, value=combined_text)
     cb.font = font(bold=True, color=WHITE, size=11)
-    cb.fill = fill(ORANGE)
+    cb.fill = fill(TEAL)
     cb.alignment = center_across()
     cb.hyperlink = "#'10_Pivot_Analysis'!A1"
     for col in range(3, 6):
-        ws.cell(row=15, column=col).fill = fill(ORANGE)
+        ws.cell(row=15, column=col).fill = fill(TEAL)
         ws.cell(row=15, column=col).alignment = center_across()
-
-    # ---- Live data callout banner — Power Query from GitHub raw ----
-    live_text = ("→  LIVE QUERY:  Data → Queries & Connections → "
-                 "right-click 'qry_orders_live' → Load To...  "
-                 "(M code fetches 99K orders fresh from GitHub raw)")
-    ws.row_dimensions[14].height = 22
-    lb = ws.cell(row=14, column=2, value=live_text)
-    lb.font = font(bold=True, color=WHITE, size=11)
-    lb.fill = fill(TEAL)
-    lb.alignment = center_across()
-    for col in range(3, 6):
-        ws.cell(row=14, column=col).fill = fill(TEAL)
-        ws.cell(row=14, column=col).alignment = center_across()
 
     # ---- TOC (merged from old 02_TOC) ----
     section_header(ws, 17, "SHEETS IN THIS WORKBOOK")
