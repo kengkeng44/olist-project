@@ -393,10 +393,15 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
     refs["rfm_start"] = s4 + 2
     refs["rfm_end"] = rfm_end
 
-    # ---- Section 5: Installments ----
+    # ---- Section 5: Installments — store the *components* (Total Revenue,
+    # Repeat Customers) in addition to the precomputed Avg / Repeat Rate.
+    # Visible 08_Installments sheet then divides components on its own row,
+    # so the math (= numerator / denominator) is transparent to reviewers.
     s5 = rfm_end + 3
     ws.cell(row=s5, column=1, value="Installments").font = font(bold=True, size=14, color=NAVY)
-    header_row(ws, s5 + 1, ["Bucket", "Orders", "Avg Ticket (R$)", "Customers", "Repeat Rate"], start_col=1)
+    header_row(ws, s5 + 1,
+               ["Bucket", "Orders", "Avg Ticket (R$)", "Customers",
+                "Repeat Rate", "Total Revenue", "Repeat Customers"], start_col=1)
     inst = read_csv("installments.csv")
     bucket_en = {
         "1 (一次付清)": "1 (single)",
@@ -407,13 +412,19 @@ def build_data_calc(wb: Workbook) -> dict[str, int | str]:
     }
     for i, row in enumerate(inst):
         r = s5 + 2 + i
+        orders = int(row["orders"])
+        avg = float(row["avg_ticket"])
+        customers = int(row["customers"])
+        rate = float(row["repeat_rate_pct"]) / 100
         ws.cell(row=r, column=1, value=bucket_en[row["bucket"]])
-        ws.cell(row=r, column=2, value=int(row["orders"]))
-        ws.cell(row=r, column=3, value=float(row["avg_ticket"]))
-        ws.cell(row=r, column=4, value=int(row["customers"]))
-        ws.cell(row=r, column=5, value=float(row["repeat_rate_pct"]) / 100)
+        ws.cell(row=r, column=2, value=orders)
+        ws.cell(row=r, column=3, value=avg)
+        ws.cell(row=r, column=4, value=customers)
+        ws.cell(row=r, column=5, value=rate)
+        ws.cell(row=r, column=6, value=round(orders * avg))      # Total Revenue
+        ws.cell(row=r, column=7, value=round(customers * rate))  # Repeat Customers
     inst_end = s5 + 1 + len(inst)
-    add_table(ws, f"A{s5 + 1}:E{inst_end}", "tbl_installments")
+    add_table(ws, f"A{s5 + 1}:G{inst_end}", "tbl_installments")
     refs["inst_start"] = s5 + 2
     refs["inst_end"] = inst_end
 
@@ -853,36 +864,41 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
             cell.border = BORDER
             cell.alignment = center()
 
-    # ---- Order Status — XLOOKUP keyed by B-column label ----
+    # ---- Order Status — Share computed via SUM on this sheet (DIVISION VISIBLE) ----
     st_row = yk_row + 2 + len(yearly) + 2
     section_header(ws, st_row, "Order Status Distribution (from raw)")
     header_row(ws, st_row + 1, ["Status", "Orders", "Share"])
     statuses_known = ["delivered", "shipped", "canceled", "unavailable", "other"]
+    st_first = st_row + 2
+    st_last = st_first + len(statuses_known) - 1
     for i, s in enumerate(statuses_known):
-        r = st_row + 2 + i
+        r = st_first + i
         ws.cell(row=r, column=2, value=s).border = BORDER
         c = ws.cell(row=r, column=3,
                     value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
         c.number_format = "#,##0"; c.border = BORDER
+        # Share = this row's Orders / SUM of Orders column on this sheet
         c2 = ws.cell(row=r, column=4,
-                     value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$C:$C,0)')
+                     value=f"=C{r}/SUM($C${st_first}:$C${st_last})")
         c2.number_format = "0.0%"; c2.border = BORDER
     st_end = st_row + 1 + len(statuses_known)
     add_table(ws, f"B{st_row + 1}:D{st_end}", "tbl_status")
 
-    # ---- Payment Mix — XLOOKUP keyed by B-column label ----
+    # ---- Payment Mix — Share computed via SUM on this sheet (DIVISION VISIBLE) ----
     pm_row = st_end + 3
     section_header(ws, pm_row, "Payment Mix (from raw)")
     header_row(ws, pm_row + 1, ["Payment type", "Orders", "Share", "Avg installments"])
     payments_known = ["credit_card", "boleto", "voucher", "debit_card"]
+    pm_first = pm_row + 2
+    pm_last = pm_first + len(payments_known) - 1
     for i, p in enumerate(payments_known):
-        r = pm_row + 2 + i
+        r = pm_first + i
         ws.cell(row=r, column=2, value=p).border = BORDER
         c = ws.cell(row=r, column=3,
                     value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
         c.number_format = "#,##0"; c.border = BORDER
         c2 = ws.cell(row=r, column=4,
-                     value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$C:$C,0)')
+                     value=f"=C{r}/SUM($C${pm_first}:$C${pm_last})")
         c2.number_format = "0.0%"; c2.border = BORDER
         c3 = ws.cell(row=r, column=5,
                      value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$D:$D,0)')
@@ -1234,15 +1250,25 @@ def build_installments(wb: Workbook, refs: dict) -> None:
     header_row(ws, 5, ["Installment bucket", "Orders", "Avg ticket (R$)", "Customers", "Repeat rate"])
     bucket_labels = ["1 (single)", "2-3 installments", "4-6 installments",
                      "7-10 installments", "11+ installments"]
-    inst_cols = [("B", "#,##0"), ("C", "0"), ("D", "#,##0"), ("E", "0.00%")]
     for i, label in enumerate(bucket_labels):
         r = 6 + i
         ws.cell(row=r, column=2, value=label).border = BORDER
-        for ci, (val_col, fmt) in enumerate(inst_cols):
-            cell = ws.cell(row=r, column=3 + ci,
-                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!${val_col}:${val_col},0)')
-            cell.number_format = fmt
-            cell.border = BORDER
+        # Orders — straight XLOOKUP
+        c_orders = ws.cell(row=r, column=3,
+                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
+        c_orders.number_format = "#,##0"; c_orders.border = BORDER
+        # Avg ticket = Total Revenue / Orders — DIVISION VISIBLE on this cell
+        c_avg = ws.cell(row=r, column=4,
+                        value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$F:$F,0)/C{r}')
+        c_avg.number_format = "0"; c_avg.border = BORDER
+        # Customers — straight XLOOKUP
+        c_cust = ws.cell(row=r, column=5,
+                         value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$D:$D,0)')
+        c_cust.number_format = "#,##0"; c_cust.border = BORDER
+        # Repeat rate = Repeat Customers / Customers — DIVISION VISIBLE
+        c_rate = ws.cell(row=r, column=6,
+                         value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$G:$G,0)/E{r}')
+        c_rate.number_format = "0.00%"; c_rate.border = BORDER
 
     end_row = 5 + len(bucket_labels)
     add_table(ws, f"B5:F{end_row}", "tbl_inst_view")
@@ -1304,16 +1330,20 @@ def build_logistics(wb: Workbook, refs: dict) -> None:
     log = read_csv("logistics.csv")
     header_row(ws, 5, ["State", "Actual days", "Estimated days", "ETA gap (days)"])
     state_codes = [row["州"] for row in log]
-    log_value_cols = ["B", "C", "D"]
     for i, state in enumerate(state_codes):
         r = 6 + i
         ws.cell(row=r, column=2, value=state).font = font(bold=True)
         ws.cell(row=r, column=2).border = BORDER
-        for ci, val_col in enumerate(log_value_cols):
-            cell = ws.cell(row=r, column=3 + ci,
-                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!${val_col}:${val_col},0)')
-            cell.number_format = "0.0"
-            cell.border = BORDER
+        # Actual / Estimated — XLOOKUP from _data_calc
+        c_actual = ws.cell(row=r, column=3,
+                           value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
+        c_actual.number_format = "0.0"; c_actual.border = BORDER
+        c_eta = ws.cell(row=r, column=4,
+                        value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$C:$C,0)')
+        c_eta.number_format = "0.0"; c_eta.border = BORDER
+        # ETA gap = Estimated - Actual — SUBTRACTION VISIBLE on same row
+        c_gap = ws.cell(row=r, column=5, value=f"=D{r}-C{r}")
+        c_gap.number_format = "0.0"; c_gap.border = BORDER
 
     end_row = 5 + len(state_codes)
     add_table(ws, f"B5:E{end_row}", "tbl_logistics_view")
