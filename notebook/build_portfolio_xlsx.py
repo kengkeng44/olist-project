@@ -877,6 +877,10 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
     yk_value_cols = ["B", "C", "D", "E"]   # GMV / Orders / Review / Delivery in _data_calc
     yk_fmts = ["0.00", "#,##0", "0.00", "0.00"]
     years = [int(row["年份"]) for row in yearly]
+    # Years where the data is partial → YoY against this baseline is meaningless.
+    # Olist launched late 2016, so 2016 only has 3 months of data; comparing
+    # 2017 vs 2016 produces a +14750% inflation that misrepresents growth.
+    partial_baseline_years = {2016}
     for i, yr in enumerate(years):
         r = yk_row + 2 + i
         ws.cell(row=r, column=2, value=yr).border = BORDER
@@ -887,14 +891,23 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
             cell.number_format = fmt
             cell.border = BORDER
             cell.alignment = center()
-        # Column G = GMV YoY growth = this row's GMV / previous row's GMV - 1
-        if i == 0:
+        # Column G = GMV YoY growth.  Suppressed when the previous year is
+        # partial (would mislead) and on the first row (no previous).
+        if i == 0 or years[i - 1] in partial_baseline_years:
             yoy = ws.cell(row=r, column=7, value="—")
             yoy.alignment = center()
         else:
             yoy = ws.cell(row=r, column=7, value=f"=C{r}/C{r-1}-1")
             yoy.number_format = "+0.0%;-0.0%;0.0%"
+            yoy.alignment = center()
         yoy.border = BORDER
+
+    # Caveat note — italic small text right below the YoY table
+    note_r = yk_row + 2 + len(years) + 1
+    note = ws.cell(row=note_r, column=2,
+                   value="YoY 2017 omitted: 2016 covers only Sep-Dec (Olist launched late 2016).")
+    note.font = font(italic=True, size=9, color=DARK_GRAY)
+    note.alignment = left()
     yk_first = yk_row + 2
     yk_last = yk_row + 1 + len(years)
     # Color scale on YoY growth column (red shrink → green grow)
@@ -909,7 +922,8 @@ def build_kpis(wb: Workbook, refs: dict) -> None:
         )
 
     # ---- Order Status — Share computed via SUM on this sheet (DIVISION VISIBLE) ----
-    st_row = yk_row + 2 + len(yearly) + 2
+    # +3 instead of +2 to give the YoY caveat note breathing room above
+    st_row = yk_row + 2 + len(yearly) + 3
     section_header(ws, st_row, "Order Status Distribution (from raw)")
     header_row(ws, st_row + 1, ["Status", "Orders", "Share"])
     statuses_known = ["delivered", "shipped", "canceled", "unavailable", "other"]
@@ -966,6 +980,9 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
     rev = read_csv("revenue.csv")
     header_row(ws, 5, ["Month", "Revenue (R$)", "MoM growth"])
     months = [row["月份"] for row in rev]
+    # 2018-10 is truncated mid-month (data ends partway through October),
+    # so its MoM would show a misleading -90% drop. Suppress.
+    truncated_months = {"2018-10"}
     for i, month in enumerate(months):
         r = 6 + i
         ws.cell(row=r, column=2, value=month).border = BORDER
@@ -973,9 +990,9 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
         c_rev = ws.cell(row=r, column=3,
                         value=f'=_xlfn.XLOOKUP(B{r},_data_calc!$A:$A,_data_calc!$B:$B,0)')
         c_rev.number_format = "#,##0"; c_rev.border = BORDER
-        # MoM growth = (this month / previous month) - 1 — VISIBLE DIVISION
-        # First row has no previous → leave blank.
-        if i == 0:
+        # MoM = (this month / previous month) - 1.  Suppress on first row
+        # (no previous) and on truncated months (would be misleading).
+        if i == 0 or month in truncated_months:
             ws.cell(row=r, column=4, value="—").alignment = center()
             ws.cell(row=r, column=4).border = BORDER
         else:
@@ -992,6 +1009,12 @@ def build_revenue(wb: Workbook, refs: dict) -> None:
             end_type="num", end_value=0.5, end_color="63BE7B",
         ),
     )
+
+    # Caveat note about truncation
+    note = ws.cell(row=end_row + 2, column=2,
+                   value="MoM 2018-10 omitted: data ends mid-October (truncated month).")
+    note.font = font(italic=True, size=9, color=DARK_GRAY)
+    note.alignment = left()
 
     # Line chart
     chart = LineChart()
@@ -1645,14 +1668,32 @@ def add_real_pivottable(file_path: Path) -> None:
         pt.PivotFields("Payment type").Orientation = xlColumnField
         data_field = pt.PivotFields("Orders")
         data_field.Orientation = xlDataField
-        # Rename + sum
+
+        # Force English labels — defaults pick the user's locale (Chinese in
+        # this case → "列標籤" / "欄標籤" / "加總 - Orders" / "總計").
         try:
-            pt.PivotFields("Sum of Orders").Function = xlSum
-            pt.PivotFields("Sum of Orders").NumberFormat = "#,##0"
+            sum_field = pt.PivotFields("Sum of Orders")
+            sum_field.Function = xlSum
+            sum_field.NumberFormat = "#,##0"
+            sum_field.Caption = "Total Orders"          # was "加總 - Orders"
         except Exception:
             pass
+        try:
+            pt.GrandTotalName = "Grand Total"            # was "總計"
+        except Exception:
+            pass
+        # Tabular layout shows the row field NAME ("State") as its own header
+        # cell instead of "Row Labels" / "列標籤". xlTabularRow = 2.
+        try:
+            pt.RowAxisLayout(2)
+        except Exception:
+            try:
+                pt.CompactLayoutRowHeader = "State"
+                pt.CompactLayoutColumnHeader = "Payment type"
+            except Exception:
+                pass
 
-        # Optional: style
+        # Style
         try:
             pt.TableStyle2 = "PivotStyleMedium9"
         except Exception:
