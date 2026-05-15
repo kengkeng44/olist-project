@@ -2,7 +2,7 @@
 
 > 用 SQL Window Function + RFM 規則分群，從 99K 筆巴西電商交易找出 **R$ 469K 召回商機** 與 **平台級留存問題**。
 
-**🚀 [Streamlit 互動](https://olist-jenho.streamlit.app/)** · **📊 [HTML Dashboard](https://kengkeng44.github.io/olist-project/)** · **📊 [Tableau](https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes)** · **📑 [面試簡報 PDF](slides/portfolio.pdf)** · **🃏 [姊妹作:Cookie Cats A/B](https://cookie-cats-jenho.streamlit.app/)**
+**🚀 [Streamlit 互動](https://olist-jenho.streamlit.app/)** · **📈 [Excel Portfolio](output/portfolio.xlsx)** ([📘 說明](docs/excel_portfolio_guide.md)) · **📊 [HTML Dashboard](https://kengkeng44.github.io/olist-project/)** · **📊 [Tableau](https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes)** · **📑 [面試簡報 PDF](slides/portfolio.pdf)** · **🃏 [姊妹作:Cookie Cats A/B](https://cookie-cats-jenho.streamlit.app/)**
 
 巴西電商平台 Olist 2016–2018 訂單資料分析專案。從 **業績趨勢、客戶體驗、客戶分群** 三個面向，找出可落地的經營建議。
 
@@ -445,6 +445,47 @@ streamlit run app/Home.py
 [查看互動式儀表板](https://public.tableau.com/app/profile/jenho.cheng/viz/2_17739060990590/1?publish=yes)
 
 ![dashboard](output/olist_screenshot.png)
+
+---
+
+## 📈 Excel Portfolio Edition
+
+延伸出 Excel-native 版本給「面試現場拿 Excel 跑」的場景。
+**[`output/portfolio.xlsx`](output/portfolio.xlsx)** — 11 工作表完整儀表板,完整邏輯說明見 **[`docs/excel_portfolio_guide.md`](docs/excel_portfolio_guide.md)**。
+
+| Sheet | 內容 |
+|---|---|
+| `01_Cover` | 專案首頁 + 3 個 headline cards(R$469K / 1.81% / 3.48×) |
+| `02_Data_Dictionary` | 9 張 raw 表 schema + variety-based 樣本(避免三列全同類值) |
+| `03_KPI_Dashboard` | Scale / 年度 / Status / Payment Mix(XLOOKUP-driven) |
+| `04_Revenue_Trend` | 月營收 + MoM growth(2017-11 黑五尖峰 R$988K) |
+| `05_RFM_Segments` | 6 客群 × ARPU × Recency(Champions/At Risk/Loyal/Average/Potential/Lost) |
+| `06_Cohort_Heatmap` | 19×13 留存矩陣,證明 M1 留存率 0.2–0.7%(遠低於 5–15% 業界標竿) |
+| `07_ROI_Calculator` | At-Risk 召回情境試算(Conservative / Optimistic / Aggressive) |
+| `08_Installments` | 5 個分期 bucket 的 AOV × repeat rate 對照 |
+| `09_Logistics` | 27 州配送 vs ETA gap(全國 36% under-promise) |
+| `10_Pivot_Analysis` | 真 PivotTable(State × Payment Type drilldown) |
+| `_data_calc`(hidden) | Single source of truth — 11 個 Excel Table |
+
+### 工程取捨亮點
+
+- **Single source of truth pattern**:visible sheets 全部用 `XLOOKUP` 引用 `_data_calc` 11 張 Table。改 raw CSV → 重跑 build 腳本 → 整本同步動。
+- **Cell ref as key**:不寫死字串 label,key 從同列 cell 讀(`=XLOOKUP(B7, _data_calc!$A:$A, ...)`),改 label 結果跟著動,reviewer 點 cell 看得到資料源。
+- **Visible math on dashboards**:除法、比率等算式擺在 visible cell(reviewer 點 cell 看得到邏輯),`_data_calc` 只存原始分子分母。
+- **Real PivotTable + Power Query POC**:`10_Pivot_Analysis` 用 win32com 後處理建**真** PivotTable + GitHub raw CSV live connection,可拖欄位、加 slicer、drill-down,不是截圖。
+
+### Scalability 規劃(架構意識)
+
+當前資料規模 ~99K 訂單,Excel + Power Pivot 完全勝任。架構選擇 rationale 與升級路徑:
+
+| 規模 | 方案 |
+|---|---|
+| 當前(~99K) | Excel + Power Pivot(VertiPaq 列式壓縮) |
+| 10×(~100 萬) | raw 改 Power Query「只建立連線」,省 80% 記憶體 |
+| 100×(~1000 萬) | DuckDB + Parquet,Python in Excel 跑分析 |
+| 1000×(~1 億) | Snowflake / Microsoft Fabric + dbt + data contract |
+
+**設計原則**:選擇符合當前規模的最簡方案,預留升級接口而非過早優化。
 
 ---
 
